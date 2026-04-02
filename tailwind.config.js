@@ -8,6 +8,11 @@ module.exports = {
         sans: ['Inter', 'Arial', 'Helvetica', 'sans-serif'],
         mono: ["'Fira Code'", 'Consolas', 'monospace'],
       },
+      colors: {
+        slate: {
+          850: '#151b2b',
+        },
+      },
     },
   },
   plugins: [require('@tailwindcss/typography')],
