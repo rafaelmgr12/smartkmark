@@ -1,11 +1,35 @@
-* {
-  box-sizing: border-box;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-html,
-body,
-#root {
-  margin: 0;
-  width: 100%;
-  height: 100%;
+/* GitHub-flavored prose overrides (only h1 gets border-bottom) */
+@layer components {
+  .prose-github h1 {
+    @apply border-b border-slate-300 pb-[0.3em] dark:border-slate-700;
+  }
+
+  .prose-github code {
+    @apply rounded-md bg-slate-200/50 px-[0.4em] py-[0.2em] font-mono text-[85%] dark:bg-slate-700/50;
+  }
+
+  .prose-github pre {
+    @apply rounded-md bg-slate-100 p-4 dark:bg-slate-900;
+  }
+
+  .prose-github pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .prose-github blockquote {
+    @apply border-slate-300 dark:border-slate-700;
+  }
+
+  .prose-github table {
+    @apply border-collapse;
+  }
+
+  .prose-github th,
+  .prose-github td {
+    @apply border border-slate-300 px-2.5 py-1.5 dark:border-slate-600;
+  }
 }
