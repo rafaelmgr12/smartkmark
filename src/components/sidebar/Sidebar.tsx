@@ -1,41 +1,23 @@
+import { useState } from 'react';
 import {
   FileText,
   Pin,
-  BookOpen,
-  Lightbulb,
-  Monitor,
-  Smartphone,
-  Settings,
-  Globe,
   FolderOpen,
-  Inbox,
-  GraduationCap,
-  PenTool,
-  Newspaper,
+  Plus,
   Trash2,
-  Activity,
-  PauseCircle,
-  CheckCircle,
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 import SidebarSection from './SidebarSection';
 import UserProfile from './UserProfile';
 import type { Notebook } from '../../types';
 
-const NOTEBOOK_ICONS: Record<string, typeof FileText> = {
-  'awesome-saas': BookOpen,
-  'desktop-app': Monitor,
-  ideas: Lightbulb,
-  'mobile-app': Smartphone,
-  operations: Settings,
-  website: Globe,
-};
-
 interface SidebarProps {
   notebooks: Notebook[];
   activeItem: string;
   onItemClick: (id: string) => void;
   totalNotes: number;
+  onCreateNotebook: (name: string) => Promise<Notebook | null>;
+  onDeleteNotebook: (id: string) => Promise<void>;
 }
 
 export default function Sidebar({
@@ -43,7 +25,20 @@ export default function Sidebar({
   activeItem,
   onItemClick,
   totalNotes,
+  onCreateNotebook,
+  onDeleteNotebook,
 }: SidebarProps) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  const handleCreate = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    await onCreateNotebook(trimmed);
+    setNewName('');
+    setIsCreating(false);
+  };
+
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-slate-700/50 bg-slate-900">
       {/* Header */}
@@ -55,112 +50,77 @@ export default function Sidebar({
           active={activeItem === 'all'}
           onClick={() => onItemClick('all')}
         />
+        <SidebarItem
+          label="Pinned"
+          icon={Pin}
+          active={activeItem === 'pinned'}
+          onClick={() => onItemClick('pinned')}
+        />
       </div>
 
       {/* Scrollable nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-2">
-        <SidebarSection title="Pinned Notes">
-          <SidebarItem
-            label="Pinned Notes"
-            icon={Pin}
-            active={activeItem === 'pinned'}
-            onClick={() => onItemClick('pinned')}
-          />
-        </SidebarSection>
-
         <SidebarSection title="Notebooks">
           {notebooks.map((nb) => (
-            <SidebarItem
-              key={nb.id}
-              label={nb.name}
-              icon={NOTEBOOK_ICONS[nb.id] || FolderOpen}
-              active={activeItem === nb.id}
-              depth={1}
-              onClick={() => onItemClick(nb.id)}
-            />
+            <div key={nb.id} className="group relative">
+              <SidebarItem
+                label={nb.name}
+                icon={FolderOpen}
+                active={activeItem === nb.id}
+                depth={1}
+                onClick={() => onItemClick(nb.id)}
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void onDeleteNotebook(nb.id);
+                }}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-slate-600 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                title={`Delete ${nb.name}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           ))}
-        </SidebarSection>
 
-        <div className="space-y-0.5">
-          <SidebarItem
-            label="Empty"
-            icon={FolderOpen}
-            active={activeItem === 'empty'}
-            onClick={() => onItemClick('empty')}
-          />
-          <SidebarItem
-            label="Hobby"
-            icon={Lightbulb}
-            active={activeItem === 'hobby'}
-            onClick={() => onItemClick('hobby')}
-          />
-          <SidebarItem
-            label="Inbox"
-            icon={Inbox}
-            active={activeItem === 'inbox'}
-            onClick={() => onItemClick('inbox')}
-          />
-          <SidebarItem
-            label="Learn"
-            icon={GraduationCap}
-            active={activeItem === 'learn'}
-            onClick={() => onItemClick('learn')}
-          />
-        </div>
-
-        <SidebarSection title="Publishing">
-          <SidebarItem
-            label="Blog"
-            icon={Newspaper}
-            active={activeItem === 'blog'}
-            depth={1}
-            onClick={() => onItemClick('blog')}
-          />
-          <SidebarItem
-            label="Tips"
-            icon={PenTool}
-            active={activeItem === 'tips'}
-            depth={1}
-            onClick={() => onItemClick('tips')}
-          />
-        </SidebarSection>
-
-        <div className="space-y-0.5">
-          <SidebarItem
-            label="Trash"
-            icon={Trash2}
-            active={activeItem === 'trash'}
-            onClick={() => onItemClick('trash')}
-          />
-        </div>
-
-        <SidebarSection title="Status">
-          <SidebarItem
-            label="Active"
-            icon={Activity}
-            active={activeItem === 'active'}
-            depth={1}
-            onClick={() => onItemClick('active')}
-          />
-          <SidebarItem
-            label="On Hold"
-            icon={PauseCircle}
-            active={activeItem === 'on-hold'}
-            depth={1}
-            onClick={() => onItemClick('on-hold')}
-          />
-          <SidebarItem
-            label="Completed"
-            icon={CheckCircle}
-            active={activeItem === 'completed'}
-            depth={1}
-            onClick={() => onItemClick('completed')}
-          />
+          {/* New notebook input */}
+          {isCreating ? (
+            <div className="px-2 py-1">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleCreate();
+                  if (e.key === 'Escape') {
+                    setIsCreating(false);
+                    setNewName('');
+                  }
+                }}
+                onBlur={() => {
+                  if (!newName.trim()) setIsCreating(false);
+                }}
+                placeholder="Notebook name..."
+                className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none focus:border-indigo-500"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsCreating(true)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-400"
+              style={{ paddingLeft: '1.5rem' }}
+            >
+              <Plus size={14} />
+              New Notebook
+            </button>
+          )}
         </SidebarSection>
       </nav>
 
       {/* User profile */}
-      <UserProfile name="Takuya Matsuyama" syncedAt="11:32:00" />
+      <UserProfile name="SmartKMark" syncedAt={new Date().toLocaleTimeString()} />
     </aside>
   );
 }
