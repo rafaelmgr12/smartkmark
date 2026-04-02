@@ -54,7 +54,7 @@
   flex-direction: column;
 }
 
-.pane h2 {
+.pane > h2 {
   margin: 0;
   padding: 0.75rem 1rem;
   font-size: 0.95rem;
@@ -81,6 +81,102 @@
 .preview-content {
   padding: 1rem;
   overflow: auto;
+  line-height: 1.6;
+}
+
+/* GitHub-style markdown rendering */
+.preview-content h1,
+.preview-content h2,
+.preview-content h3,
+.preview-content h4,
+.preview-content h5,
+.preview-content h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.preview-content h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid;
+}
+
+.preview-content h2 {
+  font-size: 1.5em;
+}
+
+.preview-content h3 {
+  font-size: 1.25em;
+}
+
+.preview-content h4 {
+  font-size: 1em;
+}
+
+.preview-content h5 {
+  font-size: 0.875em;
+}
+
+.preview-content h6 {
+  font-size: 0.85em;
+  opacity: 0.67;
+}
+
+.preview-content p {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.preview-content blockquote {
+  margin: 0 0 16px;
+  padding: 0 1em;
+  border-left: 0.25em solid;
+  opacity: 0.85;
+}
+
+.preview-content code {
+  padding: 0.2em 0.4em;
+  font-size: 85%;
+  border-radius: 6px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.preview-content pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.preview-content pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.preview-content ul,
+.preview-content ol {
+  padding-left: 2em;
+  margin-bottom: 16px;
+}
+
+.preview-content li + li {
+  margin-top: 0.25em;
+}
+
+.preview-content hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  border: 0;
+  border-bottom: 1px solid;
+}
+
+.preview-content img {
+  max-width: 100%;
 }
 
 .preview-content table {
@@ -105,7 +201,7 @@
 }
 
 .app.light .toolbar,
-.app.light .pane h2,
+.app.light .pane > h2,
 .app.light .editor-pane,
 .app.light .statusbar,
 .app.light .toolbar-actions button,
@@ -119,13 +215,30 @@
   color: #0f172a;
 }
 
+.app.light .preview-content h1,
+.app.light .preview-content hr {
+  border-color: #d0d7de;
+}
+
+.app.light .preview-content code {
+  background-color: rgba(175, 184, 193, 0.2);
+}
+
+.app.light .preview-content pre {
+  background-color: #f6f8fa;
+}
+
+.app.light .preview-content blockquote {
+  border-color: #d0d7de;
+}
+
 .app.dark {
   color: #e2e8f0;
   background-color: #0f172a;
 }
 
 .app.dark .toolbar,
-.app.dark .pane h2,
+.app.dark .pane > h2,
 .app.dark .editor-pane,
 .app.dark .statusbar,
 .app.dark .toolbar-actions button,
@@ -137,4 +250,21 @@
 .app.dark .toolbar-actions button {
   background-color: #1e293b;
   color: #e2e8f0;
+}
+
+.app.dark .preview-content h1,
+.app.dark .preview-content hr {
+  border-color: #30363d;
+}
+
+.app.dark .preview-content code {
+  background-color: rgba(110, 118, 129, 0.4);
+}
+
+.app.dark .preview-content pre {
+  background-color: #161b22;
+}
+
+.app.dark .preview-content blockquote {
+  border-color: #30363d;
 }
