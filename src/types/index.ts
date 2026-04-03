@@ -14,9 +14,11 @@ export interface NoteTag {
 export type ThemeName = 'workbench-dark' | 'workbench-light';
 export type EditorFontSize = 'sm' | 'md' | 'lg';
 export type LineWrapMode = 'wrap' | 'scroll';
+export type LayoutMode = 'workbench' | 'writer' | 'editor';
 
 export interface AppSettings {
   theme: ThemeName;
+  layoutMode: LayoutMode;
   editorFontSize: EditorFontSize;
   lineWrap: LineWrapMode;
   previewOpen: boolean;

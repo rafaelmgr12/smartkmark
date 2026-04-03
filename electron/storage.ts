@@ -48,6 +48,7 @@ export interface DesktopError {
 
 export interface AppSettings {
   theme: 'workbench-dark' | 'workbench-light';
+  layoutMode: 'workbench' | 'writer' | 'editor';
   editorFontSize: 'sm' | 'md' | 'lg';
   lineWrap: 'wrap' | 'scroll';
   previewOpen: boolean;
@@ -55,6 +56,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'workbench-dark',
+  layoutMode: 'workbench',
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,
@@ -183,6 +185,12 @@ function normalizeSettings(value: unknown): AppSettings {
       raw.theme === 'workbench-dark' || raw.theme === 'workbench-light'
         ? raw.theme
         : DEFAULT_SETTINGS.theme,
+    layoutMode:
+      raw.layoutMode === 'workbench' ||
+      raw.layoutMode === 'writer' ||
+      raw.layoutMode === 'editor'
+        ? raw.layoutMode
+        : DEFAULT_SETTINGS.layoutMode,
     editorFontSize:
       raw.editorFontSize === 'sm' ||
       raw.editorFontSize === 'md' ||

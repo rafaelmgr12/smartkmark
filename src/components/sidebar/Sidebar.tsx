@@ -12,11 +12,10 @@ import {
 import SidebarItem from './SidebarItem';
 import SidebarSection from './SidebarSection';
 import UserProfile from './UserProfile';
-import type { Notebook, ThemeName } from '../../types';
+import type { Notebook } from '../../types';
 
 interface SidebarProps {
   profileName: string;
-  theme: ThemeName;
   notebooks: Notebook[];
   activeItem: string;
   onItemClick: (id: string) => void;
@@ -24,12 +23,10 @@ interface SidebarProps {
   onCreateNotebook: (name: string) => Promise<Notebook | null>;
   onRenameNotebook: (id: string, name: string) => Promise<Notebook | null>;
   onDeleteNotebook: (id: string) => Promise<void>;
-  onThemeChange: (theme: ThemeName) => void;
 }
 
 export default function Sidebar({
   profileName,
-  theme,
   notebooks,
   activeItem,
   onItemClick,
@@ -37,7 +34,6 @@ export default function Sidebar({
   onCreateNotebook,
   onRenameNotebook,
   onDeleteNotebook,
-  onThemeChange,
 }: SidebarProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -238,12 +234,7 @@ export default function Sidebar({
         </SidebarSection>
       </nav>
 
-      <UserProfile
-        name={profileName}
-        theme={theme}
-        syncedAt={new Date().toLocaleTimeString()}
-        onThemeChange={onThemeChange}
-      />
+      <UserProfile name={profileName} syncedAt={new Date().toLocaleTimeString()} />
     </aside>
   );
 }

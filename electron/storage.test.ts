@@ -63,11 +63,13 @@ describe('storage', () => {
     const baseDir = await createTempWorkspace();
     const settings = await updateSettings(baseDir, {
       theme: 'workbench-light',
+      layoutMode: 'editor',
       editorFontSize: 'lg',
       previewOpen: true,
     });
 
     expect(settings.theme).toBe('workbench-light');
+    expect(settings.layoutMode).toBe('editor');
     expect(settings.editorFontSize).toBe('lg');
     expect(settings.previewOpen).toBe(true);
   });

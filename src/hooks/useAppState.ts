@@ -24,6 +24,7 @@ interface AppState {
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'workbench-dark',
+  layoutMode: 'workbench',
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,

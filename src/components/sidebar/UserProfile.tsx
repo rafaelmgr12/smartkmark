@@ -1,19 +1,11 @@
 import { RefreshCw } from 'lucide-react';
-import type { ThemeName } from '../../types';
 
 interface UserProfileProps {
   name: string;
-  theme: ThemeName;
   syncedAt?: string;
-  onThemeChange: (theme: ThemeName) => void;
 }
 
-export default function UserProfile({
-  name,
-  theme,
-  syncedAt,
-  onThemeChange,
-}: UserProfileProps) {
+export default function UserProfile({ name, syncedAt }: UserProfileProps) {
   return (
     <div
       className="border-t px-4 py-4"
@@ -44,22 +36,6 @@ export default function UserProfile({
             </p>
           )}
         </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-dim)]">
-          Theme
-        </span>
-        <select
-          aria-label="Theme"
-          value={theme}
-          onChange={(event) => onThemeChange(event.target.value as ThemeName)}
-          className="rounded-lg border bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <option value="workbench-dark">Dark</option>
-          <option value="workbench-light">Light</option>
-        </select>
       </div>
     </div>
   );

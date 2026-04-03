@@ -2,8 +2,20 @@ import { Suspense, lazy, useCallback, useEffect } from 'react';
 import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
 import useAppState from './hooks/useAppState';
+import type { LayoutMode, ThemeName } from './types';
 
 const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
+
+const LAYOUT_LABELS: Record<LayoutMode, string> = {
+  workbench: 'Workbench',
+  writer: 'No notebooks',
+  editor: 'Editor only',
+};
+
+const THEME_LABELS: Record<ThemeName, string> = {
+  'workbench-dark': 'Dark',
+  'workbench-light': 'Light',
+};
 
 function App() {
   const {
@@ -65,6 +77,10 @@ function App() {
     document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
 
+  const showSidebar = settings.layoutMode === 'workbench';
+  const showNoteList =
+    settings.layoutMode === 'workbench' || settings.layoutMode === 'writer';
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -87,34 +103,75 @@ function App() {
     <div className="workbench-shell p-4 pt-14">
       <div className="window-chrome">
         <div className="window-chrome__pill">
-          <span className="window-chrome__label">{profile.shortName}</span>
-          <span className="window-chrome__dot" />
-          <span className="window-chrome__title">Developer Workbench</span>
+          <div className="window-chrome__identity">
+            <span className="window-chrome__label">{profile.shortName}</span>
+            <span className="window-chrome__dot" />
+            <span className="window-chrome__title">Developer Workbench</span>
+          </div>
+          <div className="window-chrome__controls window-no-drag">
+            <label className="window-chrome__control">
+              <span>Theme</span>
+              <select
+                aria-label="Theme"
+                value={settings.theme}
+                onChange={(event) =>
+                  void patchSettings({ theme: event.target.value as ThemeName })
+                }
+              >
+                {Object.entries(THEME_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="window-chrome__control">
+              <span>Layout</span>
+              <select
+                aria-label="Layout"
+                value={settings.layoutMode}
+                onChange={(event) =>
+                  void patchSettings({
+                    layoutMode: event.target.value as LayoutMode,
+                  })
+                }
+              >
+                {Object.entries(LAYOUT_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[28px] border border-[var(--border-subtle)]">
-        <Sidebar
-          profileName={profile.shortName}
-          theme={settings.theme}
-          notebooks={notebooks}
-          activeItem={activeFilter}
-          onItemClick={setFilter}
-          totalNotes={notes.length}
-          onCreateNotebook={createNotebook}
-          onRenameNotebook={renameNotebook}
-          onDeleteNotebook={deleteNotebook}
-          onThemeChange={(theme) => void patchSettings({ theme })}
-        />
+        {showSidebar ? (
+          <Sidebar
+            profileName={profile.shortName}
+            notebooks={notebooks}
+            activeItem={activeFilter}
+            onItemClick={setFilter}
+            totalNotes={notes.length}
+            onCreateNotebook={createNotebook}
+            onRenameNotebook={renameNotebook}
+            onDeleteNotebook={deleteNotebook}
+          />
+        ) : null}
 
-        <NoteList
-          title={filterTitle}
-          notes={filteredNotes}
-          selectedNoteId={selectedNoteId}
-          onNoteSelect={(id) => void selectNote(id)}
-          onCreateNote={() => void handleCreateNote()}
-          onDeleteNote={(notebookId, noteId) => void deleteNote(notebookId, noteId)}
-          onTogglePin={(id) => void togglePin(id)}
-        />
+        {showNoteList ? (
+          <NoteList
+            title={filterTitle}
+            notes={filteredNotes}
+            selectedNoteId={selectedNoteId}
+            onNoteSelect={(id) => void selectNote(id)}
+            onCreateNote={() => void handleCreateNote()}
+            onDeleteNote={(notebookId, noteId) => void deleteNote(notebookId, noteId)}
+            onTogglePin={(id) => void togglePin(id)}
+          />
+        ) : null}
 
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden workbench-panel">
           {error ? (

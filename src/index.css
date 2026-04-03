@@ -222,13 +222,22 @@
   .window-chrome__pill {
     display: inline-flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.65rem;
+    min-width: min(72rem, calc(100vw - 4rem));
     border-radius: 999px;
     padding: 0.55rem 0.9rem;
     background: color-mix(in srgb, var(--surface-1) 72%, transparent);
     border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     backdrop-filter: blur(14px);
+  }
+
+  .window-chrome__identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
   }
 
   .window-chrome__label {
@@ -255,6 +264,43 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-2);
+  }
+
+  .window-chrome__controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    pointer-events: auto;
+  }
+
+  .window-chrome__control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .window-chrome__control select {
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--field-bg);
+    color: var(--text-2);
+    padding: 0.38rem 0.75rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    outline: none;
+  }
+
+  .window-chrome__control select:focus {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
   }
 
   .workbench-shell::before {
