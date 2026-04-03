@@ -107,7 +107,7 @@ export default function NoteList({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (window.confirm(`Delete note "${note.title}"?`)) {
+                    if (window.confirm(`Move note "${note.title}" to Trash?`)) {
                       onDeleteNote(note.notebookId, note.id);
                     }
                   }}
@@ -117,7 +117,7 @@ export default function NoteList({
                     background: 'var(--action-bg)',
                     color: 'var(--danger)',
                   }}
-                  title="Delete"
+                  title="Move to Trash"
                 >
                   <Trash2 size={12} />
                 </button>

@@ -10,9 +10,11 @@ import {
   moveNote,
   rebuildNoteIndex,
   listAllNotes,
+  listDeletedNotes,
   listNotebooks,
   renameNotebook,
   sanitizeNotebookName,
+  TRASH_NOTEBOOK_ID,
   updateNote,
   updateSettings,
   deleteNote,
@@ -157,7 +159,10 @@ describe('storage', () => {
     index = JSON.parse(
       await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
     ) as Record<string, { notebookId: string; filename: string }>;
-    expect(index[created.id]).toBeUndefined();
+    expect(index[created.id]?.notebookId).toBe(TRASH_NOTEBOOK_ID);
+
+    const deleted = await listDeletedNotes(baseDir);
+    expect(deleted.find((note) => note.id === created.id)?.deletedAt).toBeTruthy();
   });
 
   it('recovers from index inconsistencies by rebuilding automatically', async () => {

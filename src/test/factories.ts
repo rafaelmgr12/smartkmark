@@ -98,6 +98,8 @@ export function createNote(
     status: overrides.status ?? ('active' satisfies NoteStatus),
     createdAt,
     updatedAt,
+    deletedAt: overrides.deletedAt,
+    trashedFromNotebookId: overrides.trashedFromNotebookId,
     body: overrides.body ?? '',
   };
 }
@@ -112,6 +114,8 @@ export function toNoteMeta(note: Note): NoteMeta {
     status: note.status,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    deletedAt: note.deletedAt,
+    trashedFromNotebookId: note.trashedFromNotebookId,
   };
 }
 

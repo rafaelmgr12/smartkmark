@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
+import TrashNoteList from './components/notes/TrashNoteList';
 import QuickOpenModal from './components/search/QuickOpenModal';
 import useAppState from './hooks/useAppState';
 import type { LayoutMode, NoteMeta } from './types';
@@ -21,6 +22,7 @@ function App() {
     profile,
     notebooks,
     notes,
+    trashNotes,
     filteredNotes,
     filterTitle,
     selectedNoteId,
@@ -38,6 +40,8 @@ function App() {
     createNote,
     updateNote,
     deleteNote,
+    restoreNote,
+    purgeNote,
     moveNote,
     togglePin,
     patchSettings,
@@ -247,6 +251,7 @@ function App() {
             activeItem={activeFilter}
             onItemClick={setFilter}
             totalNotes={notes.length}
+            trashCount={trashNotes.length}
             onCreateNotebook={createNotebook}
             onRenameNotebook={renameNotebook}
             onDeleteNotebook={deleteNotebook}
@@ -256,7 +261,17 @@ function App() {
           />
         ) : null}
 
-        {showNoteList ? (
+        {showNoteList && activeFilter === 'trash' ? (
+          <TrashNoteList
+            notes={trashNotes}
+            onRestoreNote={(noteId, notebookId) =>
+              void restoreNote(noteId, notebookId)
+            }
+            onPurgeNote={(noteId) => void purgeNote(noteId)}
+          />
+        ) : null}
+
+        {showNoteList && activeFilter !== 'trash' ? (
           <NoteList
             title={filterTitle}
             notes={filteredNotes}
@@ -297,7 +312,7 @@ function App() {
             }
           >
             <NoteEditor
-              note={activeNote}
+              note={activeFilter === 'trash' ? null : activeNote}
               notebooks={notebooks}
               settings={settings}
               onUpdateNote={updateNote}

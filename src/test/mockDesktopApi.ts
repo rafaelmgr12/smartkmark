@@ -11,6 +11,8 @@ import {
   type DesktopSeed,
 } from './factories';
 
+const TRASH_NOTEBOOK_ID = '.trash';
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -80,13 +82,34 @@ export function createDesktopApiMock(
 
   const deleteNotebook = vi.fn<DesktopApi['deleteNotebook']>(async (id) => {
     state.notebooks = state.notebooks.filter((notebook) => notebook.id !== id);
-    state.notes = state.notes.filter((note) => note.notebookId !== id);
+    const timestamp = nextTimestamp();
+    state.notes = state.notes.map((note) =>
+      note.notebookId === id
+        ? {
+            ...note,
+            notebookId: TRASH_NOTEBOOK_ID,
+            deletedAt: timestamp,
+            trashedFromNotebookId: id,
+            updatedAt: timestamp,
+          }
+        : note
+    );
   });
 
   const listNotes = vi.fn<DesktopApi['listNotes']>(async () =>
-    sortNotesByUpdatedAt(state.notes.map((note) => toNoteMeta(note))).map((note) =>
-      clone(note)
-    )
+    sortNotesByUpdatedAt(
+      state.notes
+        .filter((note) => !note.deletedAt)
+        .map((note) => toNoteMeta(note))
+    ).map((note) => clone(note))
+  );
+
+  const listTrashNotes = vi.fn<DesktopApi['listTrashNotes']>(async () =>
+    sortNotesByUpdatedAt(
+      state.notes
+        .filter((note) => note.deletedAt)
+        .map((note) => toNoteMeta(note))
+    ).map((note) => clone(note))
   );
 
   const getNote = vi.fn<DesktopApi['getNote']>(async (_notebookId, noteId) => {
@@ -134,6 +157,40 @@ export function createDesktopApiMock(
   });
 
   const deleteNote = vi.fn<DesktopApi['deleteNote']>(async (_notebookId, noteId) => {
+    const timestamp = nextTimestamp();
+    state.notes = state.notes.map((note) =>
+      note.id === noteId
+        ? {
+            ...note,
+            notebookId: TRASH_NOTEBOOK_ID,
+            deletedAt: timestamp,
+            trashedFromNotebookId: note.trashedFromNotebookId ?? note.notebookId,
+            updatedAt: timestamp,
+          }
+        : note
+    );
+  });
+
+  const restoreNote = vi.fn<DesktopApi['restoreNote']>(async (noteId, notebookId) => {
+    const note = state.notes.find((entry) => entry.id === noteId);
+    if (!note) {
+      throw new Error('Note not found');
+    }
+
+    const destination = notebookId ?? note.trashedFromNotebookId ?? 'Inbox';
+    if (!state.notebooks.some((entry) => entry.id === destination)) {
+      state.notebooks.push({ id: destination, name: destination });
+      state.notebooks.sort((left, right) => left.name.localeCompare(right.name));
+    }
+
+    note.notebookId = destination;
+    note.deletedAt = undefined;
+    note.trashedFromNotebookId = undefined;
+    note.updatedAt = nextTimestamp();
+    return clone(note);
+  });
+
+  const purgeNote = vi.fn<DesktopApi['purgeNote']>(async (noteId) => {
     state.notes = state.notes.filter((note) => note.id !== noteId);
   });
 
@@ -186,10 +243,13 @@ export function createDesktopApiMock(
     renameNotebook,
     deleteNotebook,
     listNotes,
+    listTrashNotes,
     getNote,
     createNote,
     updateNote,
     deleteNote,
+    restoreNote,
+    purgeNote,
     moveNote,
     getProfile,
     getSettings,

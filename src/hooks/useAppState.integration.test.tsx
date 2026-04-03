@@ -194,6 +194,42 @@ describe('useAppState', () => {
     expect(result.current.notes.map((note) => note.id)).not.toContain(createdId);
   });
 
+  it('moves deleted notes into trash and restores them back to a notebook', async () => {
+    const inbox = createNotebook({ id: 'Inbox', name: 'Inbox' });
+    const note = createNote({
+      id: 'trash-note',
+      title: 'Trash flow',
+      notebookId: inbox.id,
+      body: 'Recover me',
+    });
+    const desktop = createDesktopApiMock({
+      notebooks: [inbox],
+      notes: [note],
+    });
+    window.desktopApi = desktop.api;
+
+    const { result } = renderHook(() => useAppState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.deleteNote(inbox.id, note.id);
+    });
+
+    act(() => {
+      result.current.setFilter('trash');
+    });
+
+    expect(result.current.filteredNotes.map((entry) => entry.id)).toContain(note.id);
+
+    await act(async () => {
+      await result.current.restoreNote(note.id);
+    });
+
+    expect(result.current.activeFilter).toBe(inbox.id);
+    expect(result.current.notes.map((entry) => entry.id)).toContain(note.id);
+    expect(result.current.trashNotes.map((entry) => entry.id)).not.toContain(note.id);
+  });
+
   it('patches settings and keeps the latest values', async () => {
     const desktop = createDesktopApiMock({
       settings: createSettings({

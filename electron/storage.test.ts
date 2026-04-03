@@ -8,10 +8,17 @@ import {
   AppError,
   createNote,
   createNotebook,
+  deleteNote,
+  deleteNotebook,
   ensureBaseDir,
   exportWorkspaceBackup,
   importWorkspaceBackup,
   listAllNotes,
+  listDeletedNotes,
+  listNotebooks,
+  purgeDeletedNotes,
+  purgeNote,
+  restoreNote,
 } from './storage';
 
 const execFileAsync = promisify(execFile);
@@ -88,5 +95,69 @@ describe('workspace backups', () => {
     const notesAfter = await listAllNotes(workspace);
     expect(notesAfter).toHaveLength(1);
     expect(notesAfter[0]?.title).toBe('Keep me');
+  });
+});
+
+describe('trash storage', () => {
+  it('restores a trashed note and recreates its notebook when needed', async () => {
+    const workspace = await createTempDir('smartkmark-workspace-');
+    await ensureBaseDir(workspace);
+    await createNotebook(workspace, 'Projects');
+    const created = await createNote(workspace, {
+      notebookId: 'Projects',
+      title: 'Restore me',
+      body: 'from trash',
+    });
+
+    await deleteNotebook(workspace, 'Projects');
+
+    expect(await listNotebooks(workspace)).not.toContainEqual(
+      expect.objectContaining({ id: 'Projects' })
+    );
+    expect((await listAllNotes(workspace)).map((note) => note.id)).not.toContain(created.id);
+    expect((await listDeletedNotes(workspace)).map((note) => note.id)).toContain(created.id);
+
+    const restored = await restoreNote(workspace, created.id);
+
+    expect(restored.notebookId).toBe('Projects');
+    expect(restored.deletedAt).toBeUndefined();
+    expect((await listNotebooks(workspace)).map((note) => note.id)).toContain('Projects');
+    expect((await listAllNotes(workspace)).map((note) => note.id)).toContain(created.id);
+    expect((await listDeletedNotes(workspace)).map((note) => note.id)).not.toContain(
+      created.id
+    );
+  });
+
+  it('purges deleted notes directly and through the retention cleanup', async () => {
+    const workspace = await createTempDir('smartkmark-workspace-');
+    await ensureBaseDir(workspace);
+
+    const direct = await createNote(workspace, {
+      notebookId: 'Inbox',
+      title: 'Delete forever',
+    });
+    await deleteNote(workspace, 'Inbox', direct.id);
+    await purgeNote(workspace, direct.id);
+
+    expect((await listDeletedNotes(workspace)).map((note) => note.id)).not.toContain(
+      direct.id
+    );
+
+    const aged = await createNote(workspace, {
+      notebookId: 'Inbox',
+      title: 'Auto cleanup',
+    });
+    await deleteNote(workspace, 'Inbox', aged.id, '2026-01-01T00:00:00.000Z');
+
+    const purged = await purgeDeletedNotes(workspace, {
+      olderThanDays: 30,
+      now: new Date('2026-03-15T00:00:00.000Z'),
+    });
+
+    expect(purged).toBe(1);
+    expect((await listDeletedNotes(workspace)).map((note) => note.id)).not.toContain(
+      aged.id
+    );
+    expect((await listAllNotes(workspace)).map((note) => note.id)).not.toContain(aged.id);
   });
 });

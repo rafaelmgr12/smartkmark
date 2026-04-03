@@ -17,10 +17,15 @@ import {
   getSettings,
   importWorkspaceBackup,
   listAllNotes,
+  listDeletedNotes,
   listNotebooks,
   moveNote,
+  purgeDeletedNotes,
+  purgeNote,
   rebuildNoteIndex,
   renameNotebook,
+  restoreNote,
+  runOptionalTrashCleanup,
   serializeAppError,
   updateNote,
   updateSettings,
@@ -223,6 +228,16 @@ function registerValidatedHandler<Payload>(
   });
 }
 
+function registerHandler(channel: string, handler: () => Promise<unknown>) {
+  ipcMain.handle(channel, async () => {
+    try {
+      return await handler();
+    } catch (error) {
+      throw new Error(serializeAppError(error));
+    }
+  });
+}
+
 const notesCreateSchema: Schema<{
   notebookId: string;
   title: string;
@@ -327,6 +342,23 @@ const notesUpdateSchema: Schema<{
   },
 };
 
+const notesRestoreSchema: Schema<[string, string | undefined]> = {
+  parse(input) {
+    if (!Array.isArray(input) || input.length < 1 || input.length > 2) {
+      schemaError('Expected 1 or 2 argument(s).');
+    }
+
+    const [noteId, notebookId] = input;
+    const parsedNoteId = nonEmptyStringSchema.parse(noteId);
+
+    if (notebookId !== undefined && typeof notebookId !== 'string') {
+      schemaError('notes:restore notebookId must be a string when provided.');
+    }
+
+    return [parsedNoteId, notebookId?.trim() || undefined];
+  },
+};
+
 async function createWindow(): Promise<void> {
   const window = new BrowserWindow({
     width: 1440,
@@ -354,6 +386,9 @@ async function createWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   await ensureBaseDir(dataDir());
+  await runOptionalTrashCleanup(dataDir(), {
+    enabled: process.env.SMARTKMARK_ENABLE_TRASH_CLEANUP === '1',
+  });
   await createWindow();
 
   app.on('activate', () => {
@@ -383,6 +418,9 @@ registerValidatedHandler('notebooks:delete', tupleSchema(nonEmptyStringSchema), 
 );
 
 registerValidatedHandler('notes:list', tupleSchema(), async () => listAllNotes(dataDir()));
+registerValidatedHandler('notes:listDeleted', tupleSchema(), async () =>
+  listDeletedNotes(dataDir())
+);
 registerValidatedHandler(
   'notes:get',
   tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
@@ -398,6 +436,12 @@ registerValidatedHandler(
   'notes:delete',
   tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
   async ([notebookId, noteId]) => deleteNote(dataDir(), notebookId, noteId)
+);
+registerValidatedHandler('notes:restore', notesRestoreSchema, async ([noteId, notebookId]) =>
+  restoreNote(dataDir(), noteId, notebookId)
+);
+registerValidatedHandler('notes:purge', tupleSchema(nonEmptyStringSchema), async ([noteId]) =>
+  purgeNote(dataDir(), noteId)
 );
 registerValidatedHandler(
   'notes:move',

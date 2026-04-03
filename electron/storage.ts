@@ -26,6 +26,8 @@ export interface NoteMeta {
   status: NoteStatus;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
+  trashedFromNotebookId?: string;
 }
 
 export interface Note extends NoteMeta {
@@ -67,6 +69,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const SETTINGS_FILE = 'settings.json';
 const NOTE_INDEX_FILE = '.index.json';
 const NOTEBOOK_NAME_PATTERN = /[<>:"/\\|?*]/g;
+export const TRASH_NOTEBOOK_ID = '.trash';
+const TRASH_NOTEBOOKS_DIR = '.notebooks';
+const DEFAULT_TRASH_RETENTION_DAYS = 30;
 const execFileAsync = promisify(execFile);
 
 interface NoteIndexEntry {
@@ -78,6 +83,12 @@ interface NoteIndexEntry {
 }
 
 type NoteIndex = Record<string, NoteIndexEntry>;
+
+interface DeletedNotebookRecord {
+  id: string;
+  name: string;
+  deletedAt: string;
+}
 
 export class AppError extends Error {
   code: DesktopErrorCode;
@@ -180,7 +191,9 @@ export function sanitizeNotebookName(value: string): string {
 export async function ensureBaseDir(baseDir: string): Promise<void> {
   await fs.mkdir(baseDir, { recursive: true });
   const inboxDir = path.join(baseDir, 'Inbox');
+  const trashDir = path.join(baseDir, TRASH_NOTEBOOK_ID);
   await fs.mkdir(inboxDir, { recursive: true });
+  await fs.mkdir(path.join(trashDir, TRASH_NOTEBOOKS_DIR), { recursive: true });
 }
 
 function settingsPath(baseDir: string): string {
@@ -321,7 +334,11 @@ async function validateWorkspaceStructure(candidateDir: string): Promise<void> {
   for (const entry of entries) {
     assertSafeRelativePath(entry.name);
 
-    if (entry.isFile() && entry.name !== SETTINGS_FILE) {
+    if (
+      entry.isFile() &&
+      entry.name !== SETTINGS_FILE &&
+      entry.name !== NOTE_INDEX_FILE
+    ) {
       throw new AppError(
         'VALIDATION_ERROR',
         `Unexpected file in workspace root: "${entry.name}".`
@@ -424,6 +441,46 @@ async function ensureNotebookExists(
   }
 }
 
+function trashNotebookPath(baseDir: string): string {
+  return path.join(baseDir, TRASH_NOTEBOOK_ID);
+}
+
+function trashedNotebookRecordsPath(baseDir: string): string {
+  return path.join(trashNotebookPath(baseDir), TRASH_NOTEBOOKS_DIR);
+}
+
+function trashedNotebookRecordPath(baseDir: string, notebookId: string): string {
+  return path.join(trashedNotebookRecordsPath(baseDir), `${notebookId}.json`);
+}
+
+async function writeDeletedNotebookRecord(
+  baseDir: string,
+  notebook: Notebook,
+  deletedAt: string
+): Promise<void> {
+  const record: DeletedNotebookRecord = {
+    id: notebook.id,
+    name: notebook.name,
+    deletedAt,
+  };
+
+  await fs.mkdir(trashedNotebookRecordsPath(baseDir), { recursive: true });
+  await fs.writeFile(
+    trashedNotebookRecordPath(baseDir, notebook.id),
+    JSON.stringify(record, null, 2),
+    'utf-8'
+  );
+}
+
+async function clearDeletedNotebookRecord(
+  baseDir: string,
+  notebookId: string
+): Promise<void> {
+  await fs
+    .unlink(trashedNotebookRecordPath(baseDir, notebookId))
+    .catch(() => undefined);
+}
+
 function noteIndexPath(baseDir: string): string {
   return path.join(baseDir, NOTE_INDEX_FILE);
 }
@@ -480,7 +537,7 @@ export async function listNotebooks(baseDir: string): Promise<Notebook[]> {
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
       .map((entry) => ({ id: entry.name, name: entry.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
@@ -506,6 +563,7 @@ export async function createNotebook(
 
   try {
     await fs.mkdir(notebookPath, { recursive: false });
+    await clearDeletedNotebookRecord(baseDir, notebookName);
     return { id: notebookName, name: notebookName };
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to create notebook.', {
@@ -522,6 +580,10 @@ export async function renameNotebook(
   const nextName = sanitizeNotebookName(newName);
   const currentPath = path.join(baseDir, id);
   const nextPath = path.join(baseDir, nextName);
+
+  if (id === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'The trash notebook cannot be renamed.');
+  }
 
   if (!(await pathExists(currentPath))) {
     throw new AppError('NOT_FOUND', `Notebook "${id}" was not found.`);
@@ -540,6 +602,7 @@ export async function renameNotebook(
       }
     }
     await writeNoteIndex(baseDir, index);
+    await clearDeletedNotebookRecord(baseDir, id);
     return { id: nextName, name: nextName };
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to rename notebook.', {
@@ -553,12 +616,33 @@ export async function deleteNotebook(
   id: string
 ): Promise<void> {
   const notebookPath = path.join(baseDir, id);
+  const deletedAt = new Date().toISOString();
 
   if (!(await pathExists(notebookPath))) {
     return;
   }
 
+  if (id === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'The trash notebook cannot be deleted.');
+  }
+
   try {
+    const files = await fs.readdir(notebookPath);
+    await writeDeletedNotebookRecord(baseDir, { id, name: id }, deletedAt);
+
+    for (const file of files) {
+      if (!file.endsWith('.md')) {
+        continue;
+      }
+
+      try {
+        const note = await readNoteFile(path.join(notebookPath, file), id);
+        await deleteNote(baseDir, id, note.id, deletedAt);
+      } catch {
+        continue;
+      }
+    }
+
     await fs.rm(notebookPath, { recursive: true, force: true });
     const notebooks = await listNotebooks(baseDir);
     if (notebooks.length === 0) {
@@ -628,6 +712,12 @@ function buildNote(
       typeof frontmatter.updatedAt === 'string'
         ? frontmatter.updatedAt
         : now,
+    ...(typeof frontmatter.deletedAt === 'string'
+      ? { deletedAt: frontmatter.deletedAt }
+      : {}),
+    ...(typeof frontmatter.trashedFromNotebookId === 'string'
+      ? { trashedFromNotebookId: frontmatter.trashedFromNotebookId }
+      : {}),
     body,
   };
 }
@@ -641,6 +731,10 @@ function noteToFileContent(note: Note): string {
     status: note.status,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    ...(note.deletedAt ? { deletedAt: note.deletedAt } : {}),
+    ...(note.trashedFromNotebookId
+      ? { trashedFromNotebookId: note.trashedFromNotebookId }
+      : {}),
   });
 }
 
@@ -671,11 +765,20 @@ function noteToMeta(note: Note): NoteMeta {
     status: note.status,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    deletedAt: note.deletedAt,
+    trashedFromNotebookId: note.trashedFromNotebookId,
   };
 }
 
 export async function rebuildNoteIndex(baseDir: string): Promise<NoteIndex> {
-  const notebooks = await listNotebooks(baseDir);
+  const entries = await fs.readdir(baseDir, { withFileTypes: true });
+  const notebooks = entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        (!entry.name.startsWith('.') || entry.name === TRASH_NOTEBOOK_ID)
+    )
+    .map((entry) => ({ id: entry.name, name: entry.name }));
   const index: NoteIndex = {};
 
   for (const notebook of notebooks) {
@@ -773,7 +876,10 @@ export async function findNoteFile(
   return entry?.notebookId === notebookId ? entry.filename : null;
 }
 
-export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
+export async function listAllNotes(
+  baseDir: string,
+  options?: { includeDeleted?: boolean; deletedOnly?: boolean }
+): Promise<NoteMeta[]> {
   const fromIndex = async (index: NoteIndex): Promise<NoteMeta[] | null> => {
     const notes: NoteMeta[] = [];
 
@@ -788,6 +894,15 @@ export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
         if (note.id !== noteId) {
           return null;
         }
+
+        const isDeleted = typeof note.deletedAt === 'string';
+        if (options?.deletedOnly && !isDeleted) {
+          continue;
+        }
+        if (!options?.includeDeleted && !options?.deletedOnly && isDeleted) {
+          continue;
+        }
+
         notes.push(noteToMeta(note));
       } catch {
         return null;
@@ -805,6 +920,10 @@ export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
     (left, right) =>
       new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
+}
+
+export async function listDeletedNotes(baseDir: string): Promise<NoteMeta[]> {
+  return listAllNotes(baseDir, { deletedOnly: true });
 }
 
 export async function getNote(
@@ -848,10 +967,41 @@ async function writeNote(
   }
 }
 
+async function moveStoredNote(
+  baseDir: string,
+  currentNotebookId: string,
+  currentFilename: string,
+  note: Note
+): Promise<Note> {
+  const currentPath = path.join(baseDir, currentNotebookId, currentFilename);
+  const nextNotebookPath = path.join(baseDir, note.notebookId);
+  const nextFilename = stableNoteFilename(note);
+  const nextPath = path.join(nextNotebookPath, nextFilename);
+
+  try {
+    await fs.mkdir(nextNotebookPath, { recursive: true });
+    await fs.writeFile(nextPath, noteToFileContent(note), 'utf-8');
+
+    if (currentPath !== nextPath && (await pathExists(currentPath))) {
+      await fs.unlink(currentPath);
+    }
+
+    return note;
+  } catch (error) {
+    throw new AppError('WRITE_ERROR', 'Unable to move note.', {
+      details: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
 export async function createNote(
   baseDir: string,
   payload: { notebookId: string; title: string; body?: string }
 ): Promise<Note> {
+  if (payload.notebookId === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'Notes cannot be created directly in trash.');
+  }
+
   await ensureNotebookExists(baseDir, payload.notebookId);
 
   const now = new Date().toISOString();
@@ -884,6 +1034,10 @@ export async function updateNote(
     status?: NoteStatus;
   }
 ): Promise<Note> {
+  if (payload.notebookId === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'Trash notes cannot be edited in place.');
+  }
+
   const currentFilename = await findNoteFile(baseDir, payload.notebookId, payload.id);
   if (!currentFilename) {
     throw new AppError('NOT_FOUND', `Note "${payload.id}" was not found.`);
@@ -912,7 +1066,8 @@ export async function updateNote(
 export async function deleteNote(
   baseDir: string,
   notebookId: string,
-  noteId: string
+  noteId: string,
+  deletedAt = new Date().toISOString()
 ): Promise<void> {
   const filename = await findNoteFile(baseDir, notebookId, noteId);
   if (!filename) {
@@ -920,8 +1075,19 @@ export async function deleteNote(
   }
 
   try {
-    await fs.unlink(path.join(baseDir, notebookId, filename));
-    await removeIndexEntry(baseDir, noteId);
+    const note = await readNoteFile(path.join(baseDir, notebookId, filename), notebookId);
+    if (note.deletedAt && notebookId === TRASH_NOTEBOOK_ID) {
+      return;
+    }
+
+    const trashed = await moveStoredNote(baseDir, notebookId, filename, {
+      ...note,
+      notebookId: TRASH_NOTEBOOK_ID,
+      deletedAt,
+      trashedFromNotebookId: note.trashedFromNotebookId ?? notebookId,
+      updatedAt: deletedAt,
+    });
+    await upsertIndexEntry(baseDir, trashed);
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to delete note.', {
       details: error instanceof Error ? error.message : undefined,
@@ -935,6 +1101,13 @@ export async function moveNote(
   fromNotebookId: string,
   toNotebookId: string
 ): Promise<Note> {
+  if (fromNotebookId === TRASH_NOTEBOOK_ID || toNotebookId === TRASH_NOTEBOOK_ID) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'Use the trash actions to restore or remove deleted notes.'
+    );
+  }
+
   await ensureNotebookExists(baseDir, toNotebookId);
 
   const filename = await findNoteFile(baseDir, fromNotebookId, noteId);
@@ -944,21 +1117,138 @@ export async function moveNote(
 
   const note = await readNoteFile(path.join(baseDir, fromNotebookId, filename), fromNotebookId);
 
-  try {
-    await fs.unlink(path.join(baseDir, fromNotebookId, filename));
-  } catch (error) {
-    throw new AppError('WRITE_ERROR', 'Unable to move note.', {
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-
   const moved: Note = {
     ...note,
     notebookId: toNotebookId,
+    deletedAt: undefined,
+    trashedFromNotebookId: undefined,
     updatedAt: new Date().toISOString(),
   };
 
-  const saved = await writeNote(baseDir, moved);
+  const saved = await moveStoredNote(baseDir, fromNotebookId, filename, moved);
   await upsertIndexEntry(baseDir, saved);
   return saved;
+}
+
+export async function restoreNote(
+  baseDir: string,
+  noteId: string,
+  targetNotebookId?: string
+): Promise<Note> {
+  const filename = await findNoteFile(baseDir, TRASH_NOTEBOOK_ID, noteId);
+  if (!filename) {
+    throw new AppError('NOT_FOUND', `Note "${noteId}" was not found in trash.`);
+  }
+
+  const trashed = await readNoteFile(
+    path.join(baseDir, TRASH_NOTEBOOK_ID, filename),
+    TRASH_NOTEBOOK_ID
+  );
+  const destinationNotebookId =
+    targetNotebookId?.trim() || trashed.trashedFromNotebookId || 'Inbox';
+
+  if (destinationNotebookId === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'A trashed note must be restored elsewhere.');
+  }
+
+  await fs.mkdir(path.join(baseDir, destinationNotebookId), { recursive: true });
+
+  const restored = await moveStoredNote(baseDir, TRASH_NOTEBOOK_ID, filename, {
+    ...trashed,
+    notebookId: destinationNotebookId,
+    deletedAt: undefined,
+    trashedFromNotebookId: undefined,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await upsertIndexEntry(baseDir, restored);
+  await clearDeletedNotebookRecord(baseDir, destinationNotebookId);
+  return restored;
+}
+
+export async function purgeNote(baseDir: string, noteId: string): Promise<void> {
+  const filename = await findNoteFile(baseDir, TRASH_NOTEBOOK_ID, noteId);
+  if (!filename) {
+    return;
+  }
+
+  try {
+    await fs.unlink(path.join(baseDir, TRASH_NOTEBOOK_ID, filename));
+    await removeIndexEntry(baseDir, noteId);
+  } catch (error) {
+    throw new AppError('WRITE_ERROR', 'Unable to permanently delete note.', {
+      details: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
+async function purgeDeletedNotebookRecords(
+  baseDir: string,
+  cutoffTime: number
+): Promise<void> {
+  let files: string[] = [];
+
+  try {
+    files = await fs.readdir(trashedNotebookRecordsPath(baseDir));
+  } catch {
+    return;
+  }
+
+  for (const file of files) {
+    if (!file.endsWith('.json')) {
+      continue;
+    }
+
+    try {
+      const raw = await fs.readFile(
+        path.join(trashedNotebookRecordsPath(baseDir), file),
+        'utf-8'
+      );
+      const record = JSON.parse(raw) as Partial<DeletedNotebookRecord>;
+      const deletedAt =
+        typeof record.deletedAt === 'string' ? new Date(record.deletedAt).getTime() : 0;
+
+      if (deletedAt <= cutoffTime) {
+        await fs.unlink(path.join(trashedNotebookRecordsPath(baseDir), file));
+      }
+    } catch {
+      continue;
+    }
+  }
+}
+
+export async function purgeDeletedNotes(
+  baseDir: string,
+  options?: { olderThanDays?: number; now?: Date }
+): Promise<number> {
+  const retentionDays = options?.olderThanDays ?? DEFAULT_TRASH_RETENTION_DAYS;
+  const referenceTime = options?.now?.getTime() ?? Date.now();
+  const cutoffTime = referenceTime - retentionDays * 24 * 60 * 60 * 1000;
+  const deletedNotes = await listDeletedNotes(baseDir);
+  let purged = 0;
+
+  for (const note of deletedNotes) {
+    const deletedAt = note.deletedAt ? new Date(note.deletedAt).getTime() : 0;
+    if (deletedAt <= cutoffTime) {
+      await purgeNote(baseDir, note.id);
+      purged += 1;
+    }
+  }
+
+  await purgeDeletedNotebookRecords(baseDir, cutoffTime);
+  return purged;
+}
+
+export async function runOptionalTrashCleanup(
+  baseDir: string,
+  options?: { enabled?: boolean; olderThanDays?: number; now?: Date }
+): Promise<number> {
+  if (!options?.enabled) {
+    return 0;
+  }
+
+  return purgeDeletedNotes(baseDir, {
+    olderThanDays: options.olderThanDays,
+    now: options.now,
+  });
 }

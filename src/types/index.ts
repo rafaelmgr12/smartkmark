@@ -59,6 +59,8 @@ export interface NoteMeta {
   status: NoteStatus;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
+  trashedFromNotebookId?: string;
 }
 
 export interface Note extends NoteMeta {
@@ -90,10 +92,13 @@ export interface DesktopApi {
   deleteNotebook: (id: string) => Promise<void>;
 
   listNotes: () => Promise<NoteMeta[]>;
+  listTrashNotes: () => Promise<NoteMeta[]>;
   getNote: (notebookId: string, noteId: string) => Promise<Note>;
   createNote: (payload: CreateNotePayload) => Promise<Note>;
   updateNote: (payload: UpdateNotePayload) => Promise<Note>;
   deleteNote: (notebookId: string, noteId: string) => Promise<void>;
+  restoreNote: (noteId: string, notebookId?: string) => Promise<Note>;
+  purgeNote: (noteId: string) => Promise<void>;
   moveNote: (
     noteId: string,
     fromNotebookId: string,
