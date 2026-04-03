@@ -1,191 +1,50 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import fs from 'node:fs/promises';
-import matter from 'gray-matter';
-import crypto from 'node:crypto';
-
-// ---------------------------------------------------------------------------
-// Paths
-// ---------------------------------------------------------------------------
+import {
+  createNotebook,
+  createNote,
+  deleteNotebook,
+  deleteNote,
+  ensureBaseDir,
+  getBaseDir,
+  getNote,
+  getSettings,
+  listAllNotes,
+  listNotebooks,
+  moveNote,
+  renameNotebook,
+  serializeAppError,
+  updateNote,
+  updateSettings,
+} from './storage';
 
 const isDev = !app.isPackaged;
 
-function getBaseDir(): string {
-  const docs =
-    process.env.HOME || process.env.USERPROFILE || app.getPath('documents');
-  return path.join(docs, 'Documents', 'SmartKMark');
+function dataDir(): string {
+  return getBaseDir();
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-}
-
-// ---------------------------------------------------------------------------
-// Bootstrap — ensure base dir + default "Inbox" notebook exist
-// ---------------------------------------------------------------------------
-
-async function ensureBaseDir(): Promise<void> {
-  const base = getBaseDir();
-  await fs.mkdir(base, { recursive: true });
-
-  const inboxDir = path.join(base, 'Inbox');
-  try {
-    await fs.access(inboxDir);
-  } catch {
-    await fs.mkdir(inboxDir, { recursive: true });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Notebook helpers
-// ---------------------------------------------------------------------------
-
-interface Notebook {
-  id: string;
-  name: string;
-}
-
-async function listNotebooks(): Promise<Notebook[]> {
-  const base = getBaseDir();
-  const entries = await fs.readdir(base, { withFileTypes: true });
-  return entries
-    .filter((e) => e.isDirectory())
-    .map((e) => ({ id: e.name, name: e.name }));
-}
-
-// ---------------------------------------------------------------------------
-// Note helpers
-// ---------------------------------------------------------------------------
-
-interface NoteTag {
-  label: string;
-  color: string;
-}
-
-interface NoteMeta {
-  id: string;
-  title: string;
-  notebookId: string;
-  tags: NoteTag[];
-  pinned: boolean;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Note extends NoteMeta {
-  body: string;
-}
-
-function buildNoteMeta(
-  frontmatter: Record<string, unknown>,
-  body: string,
-  notebookId: string
-): Note {
-  const now = new Date().toISOString();
-  return {
-    id: (frontmatter.id as string) || crypto.randomUUID(),
-    title: (frontmatter.title as string) || 'Untitled',
-    notebookId,
-    tags: (frontmatter.tags as NoteTag[]) || [],
-    pinned: (frontmatter.pinned as boolean) || false,
-    status: (frontmatter.status as string) || 'active',
-    createdAt: (frontmatter.createdAt as string) || now,
-    updatedAt: (frontmatter.updatedAt as string) || now,
-    body,
-  };
-}
-
-function noteToFileContent(note: Note): string {
-  const { body, ...meta } = note;
-  // Remove notebookId from frontmatter — it's derived from the directory
-  const { notebookId: _, ...storedMeta } = meta;
-  return matter.stringify(body, storedMeta);
-}
-
-async function readNote(notebookId: string, filename: string): Promise<Note> {
-  const filePath = path.join(getBaseDir(), notebookId, filename);
-  const raw = await fs.readFile(filePath, 'utf-8');
-  const { data, content } = matter(raw);
-  return buildNoteMeta(data as Record<string, unknown>, content, notebookId);
-}
-
-async function writeNote(note: Note): Promise<void> {
-  const dir = path.join(getBaseDir(), note.notebookId);
-  await fs.mkdir(dir, { recursive: true });
-  const filename = `${slugify(note.title) || note.id}.md`;
-  await fs.writeFile(path.join(dir, filename), noteToFileContent(note), 'utf-8');
-}
-
-async function findNoteFile(
-  notebookId: string,
-  noteId: string
-): Promise<string | null> {
-  const dir = path.join(getBaseDir(), notebookId);
-  let entries: string[];
-  try {
-    entries = await fs.readdir(dir);
-  } catch {
-    return null;
-  }
-  for (const file of entries) {
-    if (!file.endsWith('.md')) continue;
-    const filePath = path.join(dir, file);
-    const raw = await fs.readFile(filePath, 'utf-8');
-    const { data } = matter(raw);
-    if ((data as Record<string, unknown>).id === noteId) {
-      return file;
-    }
-  }
-  return null;
-}
-
-async function listAllNotes(): Promise<NoteMeta[]> {
-  const notebooks = await listNotebooks();
-  const all: NoteMeta[] = [];
-
-  for (const nb of notebooks) {
-    const dir = path.join(getBaseDir(), nb.id);
-    let files: string[];
+function registerHandler<Args extends unknown[], Result>(
+  channel: string,
+  handler: (...args: Args) => Promise<Result>
+) {
+  ipcMain.handle(channel, async (_event, ...args: Args) => {
     try {
-      files = await fs.readdir(dir);
-    } catch {
-      continue;
+      return await handler(...args);
+    } catch (error) {
+      throw new Error(serializeAppError(error));
     }
-    for (const file of files) {
-      if (!file.endsWith('.md')) continue;
-      try {
-        const note = await readNote(nb.id, file);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { body: _, ...meta } = note;
-        all.push(meta);
-      } catch {
-        // skip corrupt files
-      }
-    }
-  }
-
-  // Sort by updatedAt desc
-  all.sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-  return all;
+  });
 }
-
-// ---------------------------------------------------------------------------
-// Window
-// ---------------------------------------------------------------------------
 
 async function createWindow(): Promise<void> {
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 640,
+    width: 1440,
+    height: 900,
+    minWidth: 1080,
+    minHeight: 720,
     titleBarStyle: 'hiddenInset',
+    backgroundColor: '#071119',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -196,17 +55,15 @@ async function createWindow(): Promise<void> {
 
   if (isDev) {
     await window.loadURL('http://localhost:5173');
-  } else {
-    await window.loadFile(path.join(__dirname, '../dist/index.html'));
+    window.webContents.openDevTools({ mode: 'detach' });
+    return;
   }
+
+  await window.loadFile(path.join(__dirname, '../dist/index.html'));
 }
 
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
-
 app.whenReady().then(async () => {
-  await ensureBaseDir();
+  await ensureBaseDir(dataDir());
   await createWindow();
 
   app.on('activate', () => {
@@ -222,154 +79,53 @@ app.on('window-all-closed', () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// IPC — Notebooks
-// ---------------------------------------------------------------------------
+registerHandler('notebooks:list', async () => listNotebooks(dataDir()));
+registerHandler('notebooks:create', async (name: string) =>
+  createNotebook(dataDir(), name)
+);
+registerHandler('notebooks:rename', async (id: string, newName: string) =>
+  renameNotebook(dataDir(), id, newName)
+);
+registerHandler('notebooks:delete', async (id: string) =>
+  deleteNotebook(dataDir(), id)
+);
 
-ipcMain.handle('notebooks:list', async () => {
-  return listNotebooks();
-});
-
-ipcMain.handle('notebooks:create', async (_, name: string) => {
-  const id = name; // use the name as the directory name
-  const dir = path.join(getBaseDir(), id);
-  await fs.mkdir(dir, { recursive: true });
-  return { id, name } as Notebook;
-});
-
-ipcMain.handle('notebooks:rename', async (_, id: string, newName: string) => {
-  const base = getBaseDir();
-  const oldDir = path.join(base, id);
-  const newDir = path.join(base, newName);
-  await fs.rename(oldDir, newDir);
-  return { id: newName, name: newName } as Notebook;
-});
-
-ipcMain.handle('notebooks:delete', async (_, id: string) => {
-  const dir = path.join(getBaseDir(), id);
-  await fs.rm(dir, { recursive: true, force: true });
-});
-
-// ---------------------------------------------------------------------------
-// IPC — Notes
-// ---------------------------------------------------------------------------
-
-ipcMain.handle('notes:list', async () => {
-  return listAllNotes();
-});
-
-ipcMain.handle('notes:get', async (_, notebookId: string, noteId: string) => {
-  const filename = await findNoteFile(notebookId, noteId);
-  if (!filename) throw new Error(`Note ${noteId} not found in ${notebookId}`);
-  return readNote(notebookId, filename);
-});
-
-ipcMain.handle(
+registerHandler('notes:list', async () => listAllNotes(dataDir()));
+registerHandler('notes:get', async (notebookId: string, noteId: string) =>
+  getNote(dataDir(), notebookId, noteId)
+);
+registerHandler(
   'notes:create',
-  async (
-    _,
-    payload: { notebookId: string; title: string; body?: string }
-  ) => {
-    const now = new Date().toISOString();
-    const note: Note = {
-      id: crypto.randomUUID(),
-      title: payload.title,
-      notebookId: payload.notebookId,
-      tags: [],
-      pinned: false,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-      body: payload.body || '',
-    };
-    await writeNote(note);
-    return note;
-  }
+  async (payload: { notebookId: string; title: string; body?: string }) =>
+    createNote(dataDir(), payload)
 );
-
-ipcMain.handle(
+registerHandler(
   'notes:update',
-  async (
-    _,
-    payload: {
-      id: string;
-      notebookId: string;
-      title?: string;
-      body?: string;
-      tags?: NoteTag[];
-      pinned?: boolean;
-      status?: string;
-    }
-  ) => {
-    const filename = await findNoteFile(payload.notebookId, payload.id);
-    if (!filename)
-      throw new Error(
-        `Note ${payload.id} not found in ${payload.notebookId}`
-      );
-
-    const existing = await readNote(payload.notebookId, filename);
-
-    const updated: Note = {
-      ...existing,
-      title: payload.title ?? existing.title,
-      body: payload.body ?? existing.body,
-      tags: payload.tags ?? existing.tags,
-      pinned: payload.pinned ?? existing.pinned,
-      status: payload.status ?? existing.status,
-      updatedAt: new Date().toISOString(),
-    };
-
-    // If title changed, delete old file first
-    const oldSlug = slugify(existing.title) || existing.id;
-    const newSlug = slugify(updated.title) || updated.id;
-    if (oldSlug !== newSlug) {
-      const oldPath = path.join(
-        getBaseDir(),
-        payload.notebookId,
-        `${oldSlug}.md`
-      );
-      try {
-        await fs.unlink(oldPath);
-      } catch {
-        // old file may not exist
-      }
-    }
-
-    await writeNote(updated);
-    return updated;
-  }
+  async (payload: {
+    id: string;
+    notebookId: string;
+    title?: string;
+    body?: string;
+    tags?: { label: string; color: string }[];
+    pinned?: boolean;
+    status?: 'active' | 'onHold' | 'completed' | 'dropped';
+  }) => updateNote(dataDir(), payload)
 );
-
-ipcMain.handle(
+registerHandler(
   'notes:delete',
-  async (_, notebookId: string, noteId: string) => {
-    const filename = await findNoteFile(notebookId, noteId);
-    if (!filename) return;
-    const filePath = path.join(getBaseDir(), notebookId, filename);
-    await fs.unlink(filePath);
-  }
+  async (notebookId: string, noteId: string) =>
+    deleteNote(dataDir(), notebookId, noteId)
+);
+registerHandler(
+  'notes:move',
+  async (noteId: string, fromNotebookId: string, toNotebookId: string) =>
+    moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
 );
 
-ipcMain.handle(
-  'notes:move',
-  async (_, noteId: string, fromNotebookId: string, toNotebookId: string) => {
-    const filename = await findNoteFile(fromNotebookId, noteId);
-    if (!filename)
-      throw new Error(`Note ${noteId} not found in ${fromNotebookId}`);
-
-    const note = await readNote(fromNotebookId, filename);
-
-    // Delete from old location
-    const oldPath = path.join(getBaseDir(), fromNotebookId, filename);
-    await fs.unlink(oldPath);
-
-    // Write to new location
-    const movedNote: Note = {
-      ...note,
-      notebookId: toNotebookId,
-      updatedAt: new Date().toISOString(),
-    };
-    await writeNote(movedNote);
-    return movedNote;
-  }
+registerHandler('settings:get', async () => getSettings(dataDir()));
+registerHandler('settings:update', async (patch: Record<string, unknown>) =>
+  updateSettings(
+    dataDir(),
+    patch as Parameters<typeof updateSettings>[1]
+  )
 );

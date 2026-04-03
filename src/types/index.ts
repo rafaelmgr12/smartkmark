@@ -6,8 +6,36 @@ export interface Notebook {
 export type TagColor = 'green' | 'orange' | 'blue' | 'purple' | 'red' | 'gray';
 
 export interface NoteTag {
+  id?: string;
   label: string;
   color: TagColor;
+}
+
+export type ThemeName = 'workbench';
+export type EditorFontSize = 'sm' | 'md' | 'lg';
+export type LineWrapMode = 'wrap' | 'scroll';
+
+export interface AppSettings {
+  theme: ThemeName;
+  editorFontSize: EditorFontSize;
+  lineWrap: LineWrapMode;
+  previewOpen: boolean;
+}
+
+export type DesktopErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'READ_ERROR'
+  | 'WRITE_ERROR'
+  | 'CORRUPT_FILE'
+  | 'UNKNOWN_ERROR';
+
+export interface DesktopError {
+  code: DesktopErrorCode;
+  message: string;
+  details?: string;
+  recoverable?: boolean;
 }
 
 export interface NoteMeta {
@@ -55,6 +83,8 @@ export interface DesktopApi {
   updateNote: (payload: UpdateNotePayload) => Promise<Note>;
   deleteNote: (notebookId: string, noteId: string) => Promise<void>;
   moveNote: (noteId: string, fromNotebookId: string, toNotebookId: string) => Promise<Note>;
+  getSettings: () => Promise<AppSettings>;
+  updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
 }
 
 declare global {

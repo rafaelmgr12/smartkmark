@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getErrorMessage } from '../lib/desktop-errors';
 import type {
-  Notebook,
+  AppSettings,
+  CreateNotePayload,
   Note,
   NoteMeta,
-  CreateNotePayload,
+  Notebook,
   UpdateNotePayload,
 } from '../types';
 
@@ -11,10 +13,25 @@ interface AppState {
   notebooks: Notebook[];
   notes: NoteMeta[];
   selectedNoteId: string | null;
-  selectedNotebookId: string | null;
   activeNote: Note | null;
-  activeFilter: string; // 'all' | 'pinned' | notebookId
+  activeFilter: string;
+  settings: AppSettings;
   loading: boolean;
+  error: string | null;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  theme: 'workbench',
+  editorFontSize: 'md',
+  lineWrap: 'wrap',
+  previewOpen: false,
+};
+
+function sortNotes(notes: NoteMeta[]): NoteMeta[] {
+  return [...notes].sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  );
 }
 
 export default function useAppState() {
@@ -22,32 +39,47 @@ export default function useAppState() {
     notebooks: [],
     notes: [],
     selectedNoteId: null,
-    selectedNotebookId: null,
     activeNote: null,
     activeFilter: 'all',
+    settings: DEFAULT_SETTINGS,
     loading: true,
+    error: null,
   });
-
-  // ----- Bootstrap: load notebooks + notes from disk -----
 
   const refresh = useCallback(async () => {
     try {
-      const [notebooks, notes] = await Promise.all([
+      const [notebooks, notes, settings] = await Promise.all([
         window.desktopApi.listNotebooks(),
         window.desktopApi.listNotes(),
+        window.desktopApi.getSettings(),
       ]);
-      setState((prev) => ({ ...prev, notebooks, notes, loading: false }));
-    } catch (err) {
-      console.error('Failed to load data:', err);
-      setState((prev) => ({ ...prev, loading: false }));
+
+      setState((prev) => ({
+        ...prev,
+        notebooks,
+        notes: sortNotes(notes),
+        settings,
+        loading: false,
+        error: null,
+        activeFilter:
+          prev.activeFilter !== 'all' &&
+          prev.activeFilter !== 'pinned' &&
+          !notebooks.some((notebook) => notebook.id === prev.activeFilter)
+            ? 'all'
+            : prev.activeFilter,
+      }));
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: getErrorMessage(error, 'Failed to load SmartKMark data.'),
+      }));
     }
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  // ----- Note selection -----
 
   const selectNote = useCallback(
     async (noteId: string | null) => {
@@ -60,128 +92,170 @@ export default function useAppState() {
         return;
       }
 
-      const meta = state.notes.find((n) => n.id === noteId);
-      if (!meta) return;
+      const meta = state.notes.find((note) => note.id === noteId);
+      if (!meta) {
+        return;
+      }
 
       try {
-        const note = await window.desktopApi.getNote(
-          meta.notebookId,
-          meta.id
-        );
+        const note = await window.desktopApi.getNote(meta.notebookId, meta.id);
         setState((prev) => ({
           ...prev,
           selectedNoteId: noteId,
           activeNote: note,
+          error: null,
         }));
-      } catch (err) {
-        console.error('Failed to load note:', err);
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          error: getErrorMessage(error, 'Failed to open the selected note.'),
+        }));
       }
     },
     [state.notes]
   );
 
-  // ----- Filter -----
-
   const setFilter = useCallback((filter: string) => {
     setState((prev) => ({ ...prev, activeFilter: filter }));
   }, []);
 
-  // ----- Notebook CRUD -----
+  const clearError = useCallback(() => {
+    setState((prev) => ({ ...prev, error: null }));
+  }, []);
 
-  const createNotebook = useCallback(
-    async (name: string) => {
-      try {
-        const nb = await window.desktopApi.createNotebook(name);
-        setState((prev) => ({
-          ...prev,
-          notebooks: [...prev.notebooks, nb],
-        }));
-        return nb;
-      } catch (err) {
-        console.error('Failed to create notebook:', err);
-        return null;
-      }
-    },
-    []
-  );
+  const createNotebook = useCallback(async (name: string) => {
+    try {
+      const notebook = await window.desktopApi.createNotebook(name);
+      setState((prev) => ({
+        ...prev,
+        notebooks: [...prev.notebooks, notebook].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        ),
+        activeFilter: notebook.id,
+        error: null,
+      }));
+      return notebook;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to create notebook.'),
+      }));
+      return null;
+    }
+  }, []);
 
   const deleteNotebook = useCallback(
     async (id: string) => {
       try {
         await window.desktopApi.deleteNotebook(id);
-        await refresh();
-      } catch (err) {
-        console.error('Failed to delete notebook:', err);
-      }
-    },
-    [refresh]
-  );
-
-  // ----- Note CRUD -----
-
-  const createNote = useCallback(
-    async (payload: CreateNotePayload) => {
-      try {
-        const note = await window.desktopApi.createNote(payload);
-        const { body: _, ...meta } = note;
         setState((prev) => ({
           ...prev,
-          notes: [meta, ...prev.notes],
-          selectedNoteId: note.id,
-          activeNote: note,
-        }));
-        return note;
-      } catch (err) {
-        console.error('Failed to create note:', err);
-        return null;
-      }
-    },
-    []
-  );
-
-  const updateNote = useCallback(
-    async (payload: UpdateNotePayload) => {
-      try {
-        const updated = await window.desktopApi.updateNote(payload);
-        const { body: _, ...meta } = updated;
-        setState((prev) => ({
-          ...prev,
-          notes: prev.notes.map((n) => (n.id === updated.id ? meta : n)),
-          activeNote:
-            prev.selectedNoteId === updated.id ? updated : prev.activeNote,
-        }));
-        return updated;
-      } catch (err) {
-        console.error('Failed to update note:', err);
-        return null;
-      }
-    },
-    []
-  );
-
-  const deleteNote = useCallback(
-    async (notebookId: string, noteId: string) => {
-      try {
-        await window.desktopApi.deleteNote(notebookId, noteId);
-        setState((prev) => ({
-          ...prev,
-          notes: prev.notes.filter((n) => n.id !== noteId),
+          notebooks: prev.notebooks.filter((notebook) => notebook.id !== id),
+          notes: prev.notes.filter((note) => note.notebookId !== id),
           selectedNoteId:
-            prev.selectedNoteId === noteId ? null : prev.selectedNoteId,
-          activeNote:
-            prev.selectedNoteId === noteId ? null : prev.activeNote,
+            prev.activeNote?.notebookId === id ? null : prev.selectedNoteId,
+          activeNote: prev.activeNote?.notebookId === id ? null : prev.activeNote,
+          activeFilter: prev.activeFilter === id ? 'all' : prev.activeFilter,
+          error: null,
         }));
-      } catch (err) {
-        console.error('Failed to delete note:', err);
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          error: getErrorMessage(error, 'Failed to delete notebook.'),
+        }));
       }
     },
     []
   );
+
+  const createNote = useCallback(async (payload: CreateNotePayload) => {
+    try {
+      const note = await window.desktopApi.createNote(payload);
+      const meta = {
+        id: note.id,
+        title: note.title,
+        notebookId: note.notebookId,
+        tags: note.tags,
+        pinned: note.pinned,
+        status: note.status,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+      };
+      setState((prev) => ({
+        ...prev,
+        notes: sortNotes([meta, ...prev.notes]),
+        selectedNoteId: note.id,
+        activeNote: note,
+        activeFilter: payload.notebookId,
+        error: null,
+      }));
+      return note;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to create note.'),
+      }));
+      return null;
+    }
+  }, []);
+
+  const updateNote = useCallback(async (payload: UpdateNotePayload) => {
+    try {
+      const updated = await window.desktopApi.updateNote(payload);
+      const meta = {
+        id: updated.id,
+        title: updated.title,
+        notebookId: updated.notebookId,
+        tags: updated.tags,
+        pinned: updated.pinned,
+        status: updated.status,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      };
+      setState((prev) => ({
+        ...prev,
+        notes: sortNotes(
+          prev.notes.map((note) => (note.id === updated.id ? meta : note))
+        ),
+        activeNote:
+          prev.selectedNoteId === updated.id ? updated : prev.activeNote,
+        error: null,
+      }));
+      return updated;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to save note.'),
+      }));
+      return null;
+    }
+  }, []);
+
+  const deleteNote = useCallback(async (notebookId: string, noteId: string) => {
+    try {
+      await window.desktopApi.deleteNote(notebookId, noteId);
+      setState((prev) => ({
+        ...prev,
+        notes: prev.notes.filter((note) => note.id !== noteId),
+        selectedNoteId: prev.selectedNoteId === noteId ? null : prev.selectedNoteId,
+        activeNote: prev.selectedNoteId === noteId ? null : prev.activeNote,
+        error: null,
+      }));
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to delete note.'),
+      }));
+    }
+  }, []);
 
   const togglePin = useCallback(
     async (noteId: string) => {
-      const meta = state.notes.find((n) => n.id === noteId);
-      if (!meta) return;
+      const meta = state.notes.find((note) => note.id === noteId);
+      if (!meta) {
+        return;
+      }
+
       await updateNote({
         id: meta.id,
         notebookId: meta.notebookId,
@@ -191,27 +265,56 @@ export default function useAppState() {
     [state.notes, updateNote]
   );
 
-  // ----- Derived data -----
+  const patchSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    try {
+      const next = await window.desktopApi.updateSettings(patch);
+      setState((prev) => ({
+        ...prev,
+        settings: next,
+        error: null,
+      }));
+      return next;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to save preferences.'),
+      }));
+      return null;
+    }
+  }, []);
 
-  const filteredNotes = (() => {
-    const { activeFilter, notes } = state;
-    if (activeFilter === 'all') return notes;
-    if (activeFilter === 'pinned') return notes.filter((n) => n.pinned);
-    return notes.filter((n) => n.notebookId === activeFilter);
-  })();
+  const filteredNotes = useMemo(() => {
+    if (state.activeFilter === 'all') {
+      return state.notes;
+    }
 
-  const filterTitle = (() => {
-    const { activeFilter, notebooks } = state;
-    if (activeFilter === 'all') return 'All Notes';
-    if (activeFilter === 'pinned') return 'Pinned Notes';
-    const nb = notebooks.find((n) => n.id === activeFilter);
-    return nb?.name ?? 'Notes';
-  })();
+    if (state.activeFilter === 'pinned') {
+      return state.notes.filter((note) => note.pinned);
+    }
+
+    return state.notes.filter((note) => note.notebookId === state.activeFilter);
+  }, [state.activeFilter, state.notes]);
+
+  const filterTitle = useMemo(() => {
+    if (state.activeFilter === 'all') {
+      return 'All Notes';
+    }
+
+    if (state.activeFilter === 'pinned') {
+      return 'Pinned Notes';
+    }
+
+    return (
+      state.notebooks.find((notebook) => notebook.id === state.activeFilter)?.name ??
+      'Notes'
+    );
+  }, [state.activeFilter, state.notebooks]);
 
   return {
     ...state,
     filteredNotes,
     filterTitle,
+    clearError,
     refresh,
     selectNote,
     setFilter,
@@ -221,5 +324,6 @@ export default function useAppState() {
     updateNote,
     deleteNote,
     togglePin,
+    patchSettings,
   };
 }

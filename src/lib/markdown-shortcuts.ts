@@ -1,21 +1,14 @@
-/**
- * Helpers that apply markdown formatting to a textarea selection.
- * Each function receives the textarea element and returns the new
- * { value, selectionStart, selectionEnd } so the caller can update state.
- */
-
-interface TextareaState {
+export interface SelectionState {
   value: string;
   selectionStart: number;
   selectionEnd: number;
 }
 
-function getSelection(el: HTMLTextAreaElement): {
-  before: string;
-  selected: string;
-  after: string;
-} {
-  const { value, selectionStart, selectionEnd } = el;
+function getSelection(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number
+): { before: string; selected: string; after: string } {
   return {
     before: value.slice(0, selectionStart),
     selected: value.slice(selectionStart, selectionEnd),
@@ -23,18 +16,36 @@ function getSelection(el: HTMLTextAreaElement): {
   };
 }
 
-/** Wrap selection with symmetric markers (bold, italic, strikethrough, code) */
-export function wrapSelection(
-  el: HTMLTextAreaElement,
-  marker: string
-): TextareaState {
-  const { before, selected, after } = getSelection(el);
+function fromTextarea(el: HTMLTextAreaElement): SelectionState {
+  return {
+    value: el.value,
+    selectionStart: el.selectionStart,
+    selectionEnd: el.selectionEnd,
+  };
+}
 
-  // If already wrapped, unwrap
+function applyFromSelection(
+  input: SelectionState,
+  transform: (state: SelectionState) => SelectionState
+): SelectionState {
+  return transform(input);
+}
+
+export function wrapSelection(
+  input: SelectionState | HTMLTextAreaElement,
+  marker: string
+): SelectionState {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
+
   if (selected.startsWith(marker) && selected.endsWith(marker)) {
     const unwrapped = selected.slice(marker.length, -marker.length);
     return {
-      value: before + unwrapped + after,
+      value: `${before}${unwrapped}${after}`,
       selectionStart: before.length,
       selectionEnd: before.length + unwrapped.length,
     };
@@ -42,89 +53,163 @@ export function wrapSelection(
 
   const wrapped = `${marker}${selected || 'text'}${marker}`;
   return {
-    value: before + wrapped + after,
+    value: `${before}${wrapped}${after}`,
     selectionStart: before.length + marker.length,
     selectionEnd: before.length + wrapped.length - marker.length,
   };
 }
 
-/** Insert a prefix at the beginning of each selected line (lists, headings, quotes) */
 export function prefixLines(
-  el: HTMLTextAreaElement,
+  input: SelectionState | HTMLTextAreaElement,
   prefix: string
-): TextareaState {
-  const { before, selected, after } = getSelection(el);
+): SelectionState {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
   const lines = (selected || 'item').split('\n');
   const prefixed = lines.map((line) => `${prefix}${line}`).join('\n');
+
   return {
-    value: before + prefixed + after,
+    value: `${before}${prefixed}${after}`,
     selectionStart: before.length,
     selectionEnd: before.length + prefixed.length,
   };
 }
 
-/** Insert a numbered list */
-export function numberedList(el: HTMLTextAreaElement): TextareaState {
-  const { before, selected, after } = getSelection(el);
+export function numberedList(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
   const lines = (selected || 'item').split('\n');
-  const numbered = lines
-    .map((line, i) => `${i + 1}. ${line}`)
-    .join('\n');
+  const numbered = lines.map((line, index) => `${index + 1}. ${line}`).join('\n');
+
   return {
-    value: before + numbered + after,
+    value: `${before}${numbered}${after}`,
     selectionStart: before.length,
     selectionEnd: before.length + numbered.length,
   };
 }
 
-/** Insert a task list */
-export function taskList(el: HTMLTextAreaElement): TextareaState {
-  return prefixLines(el, '- [ ] ');
+export function taskList(input: SelectionState | HTMLTextAreaElement) {
+  return prefixLines(input, '- [ ] ');
 }
 
-/** Insert a link */
-export function insertLink(el: HTMLTextAreaElement): TextareaState {
-  const { before, selected, after } = getSelection(el);
+export function insertLink(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
   const text = selected || 'link text';
-  const link = `[${text}](url)`;
+  const nextValue = `[${text}](url)`;
+
   return {
-    value: before + link + after,
+    value: `${before}${nextValue}${after}`,
     selectionStart: before.length + text.length + 3,
     selectionEnd: before.length + text.length + 6,
   };
 }
 
-/** Insert an image */
-export function insertImage(el: HTMLTextAreaElement): TextareaState {
-  const { before, selected, after } = getSelection(el);
-  const alt = selected || 'alt text';
-  const img = `![${alt}](url)`;
+export function insertImage(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
+  const text = selected || 'alt text';
+  const nextValue = `![${text}](url)`;
+
   return {
-    value: before + img + after,
-    selectionStart: before.length + alt.length + 4,
-    selectionEnd: before.length + alt.length + 7,
+    value: `${before}${nextValue}${after}`,
+    selectionStart: before.length + text.length + 4,
+    selectionEnd: before.length + text.length + 7,
   };
 }
 
-/** Insert a code block */
-export function insertCodeBlock(el: HTMLTextAreaElement): TextareaState {
-  const { before, selected, after } = getSelection(el);
+export function insertCodeBlock(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
   const code = selected || 'code';
-  const block = `\n\`\`\`\n${code}\n\`\`\`\n`;
+  const block = `\n\`\`\`ts\n${code}\n\`\`\`\n`;
+
   return {
-    value: before + block + after,
+    value: `${before}${block}${after}`,
     selectionStart: before.length + 5,
-    selectionEnd: before.length + 5 + code.length,
+    selectionEnd: before.length + 7,
   };
 }
 
-/** Insert a horizontal rule */
-export function insertHorizontalRule(el: HTMLTextAreaElement): TextareaState {
-  const { before, after } = getSelection(el);
-  const hr = '\n---\n';
+export function insertHorizontalRule(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
+  const rule = '\n---\n';
+
   return {
-    value: before + hr + after,
-    selectionStart: before.length + hr.length,
-    selectionEnd: before.length + hr.length,
+    value: `${before}${rule}${after}`,
+    selectionStart: before.length + rule.length,
+    selectionEnd: before.length + rule.length,
   };
+}
+
+export function insertInlineMath(input: SelectionState | HTMLTextAreaElement) {
+  return wrapSelection(input, '$');
+}
+
+export function insertMathBlock(input: SelectionState | HTMLTextAreaElement) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
+  const block = `\n$$\n${selected || 'E = mc^2'}\n$$\n`;
+
+  return {
+    value: `${before}${block}${after}`,
+    selectionStart: before.length + 4,
+    selectionEnd: before.length + 4 + (selected || 'E = mc^2').length,
+  };
+}
+
+export function insertCallout(
+  input: SelectionState | HTMLTextAreaElement,
+  kind: 'NOTE' | 'TIP' | 'WARNING' = 'NOTE'
+) {
+  const state = input instanceof HTMLTextAreaElement ? fromTextarea(input) : input;
+  const { before, selected, after } = getSelection(
+    state.value,
+    state.selectionStart,
+    state.selectionEnd
+  );
+  const lines = (selected || 'Callout content').split('\n');
+  const callout = [`> [!${kind}]`, ...lines.map((line) => `> ${line}`)].join('\n');
+
+  return {
+    value: `${before}${callout}${after}`,
+    selectionStart: before.length,
+    selectionEnd: before.length + callout.length,
+  };
+}
+
+export function applyMarkdownTransform(
+  input: SelectionState,
+  transform: (state: SelectionState) => SelectionState
+) {
+  return applyFromSelection(input, transform);
 }
