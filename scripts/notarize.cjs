@@ -1,6 +1,5 @@
-const { notarize } = require('@electron/notarize');
-
 exports.default = async function notarizeBuild(context) {
+  const { notarize } = await import('@electron/notarize');
   const { electronPlatformName, appOutDir, packager } = context;
 
   if (electronPlatformName !== 'darwin') {
