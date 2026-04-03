@@ -7,8 +7,10 @@ import {
   createNotebook,
   createNote,
   ensureBaseDir,
+  moveNote,
   listAllNotes,
   listNotebooks,
+  renameNotebook,
   sanitizeNotebookName,
   updateSettings,
 } from './storage';
@@ -60,10 +62,12 @@ describe('storage', () => {
   it('persists normalized app settings', async () => {
     const baseDir = await createTempWorkspace();
     const settings = await updateSettings(baseDir, {
+      theme: 'workbench-light',
       editorFontSize: 'lg',
       previewOpen: true,
     });
 
+    expect(settings.theme).toBe('workbench-light');
     expect(settings.editorFontSize).toBe('lg');
     expect(settings.previewOpen).toBe(true);
   });
@@ -72,5 +76,37 @@ describe('storage', () => {
     const baseDir = await createTempWorkspace();
     const notebooks = await listNotebooks(baseDir);
     expect(notebooks.map((notebook) => notebook.id)).toContain('Inbox');
+  });
+
+  it('renames a notebook and keeps its notes addressable', async () => {
+    const baseDir = await createTempWorkspace();
+    await createNotebook(baseDir, 'Drafts');
+    await createNote(baseDir, { notebookId: 'Drafts', title: 'Spec' });
+
+    await renameNotebook(baseDir, 'Drafts', 'Backend Notes');
+
+    const notebooks = await listNotebooks(baseDir);
+    const notes = await listAllNotes(baseDir);
+
+    expect(notebooks.map((notebook) => notebook.id)).toContain('Backend Notes');
+    expect(notes[0]?.notebookId).toBe('Backend Notes');
+  });
+
+  it('moves a note between notebooks without losing metadata', async () => {
+    const baseDir = await createTempWorkspace();
+    await createNotebook(baseDir, 'Inbox Two');
+    const created = await createNote(baseDir, {
+      notebookId: 'Inbox',
+      title: 'Move me',
+      body: 'payload',
+    });
+
+    const moved = await moveNote(baseDir, created.id, 'Inbox', 'Inbox Two');
+
+    expect(moved.notebookId).toBe('Inbox Two');
+    const notes = await listAllNotes(baseDir);
+    expect(notes.find((note) => note.id === created.id)?.notebookId).toBe(
+      'Inbox Two'
+    );
   });
 });

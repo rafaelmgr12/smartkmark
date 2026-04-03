@@ -19,11 +19,9 @@ export default function SidebarItem({
   onClick,
 }: SidebarItemProps) {
   const borderColor = active
-    ? 'rgba(34, 211, 238, 0.26)'
-    : 'rgba(103, 134, 154, 0.08)';
-  const background = active
-    ? 'rgba(18, 48, 64, 0.88)'
-    : 'transparent';
+    ? 'var(--nav-item-active-border)'
+    : 'var(--nav-item-border)';
+  const background = active ? 'var(--nav-item-active-bg)' : 'transparent';
 
   return (
     <button
@@ -34,8 +32,8 @@ export default function SidebarItem({
       aria-pressed={active}
       onMouseEnter={(event) => {
         if (!active) {
-          event.currentTarget.style.background = 'rgba(17, 36, 49, 0.8)';
-          event.currentTarget.style.borderColor = 'rgba(103, 134, 154, 0.18)';
+          event.currentTarget.style.background = 'var(--nav-item-hover-bg)';
+          event.currentTarget.style.borderColor = 'var(--border-subtle)';
         }
       }}
       onMouseLeave={(event) => {

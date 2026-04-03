@@ -21,7 +21,7 @@ interface AppState {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'workbench',
+  theme: 'workbench-dark',
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,
@@ -168,6 +168,38 @@ export default function useAppState() {
     []
   );
 
+  const renameNotebook = useCallback(async (id: string, name: string) => {
+    try {
+      const renamed = await window.desktopApi.renameNotebook(id, name);
+      setState((prev) => ({
+        ...prev,
+        notebooks: prev.notebooks
+          .map((notebook) =>
+            notebook.id === id ? renamed : notebook
+          )
+          .sort((left, right) => left.name.localeCompare(right.name)),
+        notes: sortNotes(
+          prev.notes.map((note) =>
+            note.notebookId === id ? { ...note, notebookId: renamed.id } : note
+          )
+        ),
+        activeNote:
+          prev.activeNote?.notebookId === id
+            ? { ...prev.activeNote, notebookId: renamed.id }
+            : prev.activeNote,
+        activeFilter: prev.activeFilter === id ? renamed.id : prev.activeFilter,
+        error: null,
+      }));
+      return renamed;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to rename notebook.'),
+      }));
+      return null;
+    }
+  }, []);
+
   const createNote = useCallback(async (payload: CreateNotePayload) => {
     try {
       const note = await window.desktopApi.createNote(payload);
@@ -249,6 +281,49 @@ export default function useAppState() {
     }
   }, []);
 
+  const moveNote = useCallback(
+    async (noteId: string, fromNotebookId: string, toNotebookId: string) => {
+      try {
+        const moved = await window.desktopApi.moveNote(
+          noteId,
+          fromNotebookId,
+          toNotebookId
+        );
+        const meta = {
+          id: moved.id,
+          title: moved.title,
+          notebookId: moved.notebookId,
+          tags: moved.tags,
+          pinned: moved.pinned,
+          status: moved.status,
+          createdAt: moved.createdAt,
+          updatedAt: moved.updatedAt,
+        };
+
+        setState((prev) => ({
+          ...prev,
+          notes: sortNotes(
+            prev.notes.map((note) => (note.id === moved.id ? meta : note))
+          ),
+          activeNote:
+            prev.selectedNoteId === moved.id ? moved : prev.activeNote,
+          activeFilter:
+            prev.activeFilter === fromNotebookId ? toNotebookId : prev.activeFilter,
+          error: null,
+        }));
+
+        return moved;
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          error: getErrorMessage(error, 'Failed to move note.'),
+        }));
+        return null;
+      }
+    },
+    []
+  );
+
   const togglePin = useCallback(
     async (noteId: string) => {
       const meta = state.notes.find((note) => note.id === noteId);
@@ -319,10 +394,12 @@ export default function useAppState() {
     selectNote,
     setFilter,
     createNotebook,
+    renameNotebook,
     deleteNotebook,
     createNote,
     updateNote,
     deleteNote,
+    moveNote,
     togglePin,
     patchSettings,
   };

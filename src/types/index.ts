@@ -11,7 +11,7 @@ export interface NoteTag {
   color: TagColor;
 }
 
-export type ThemeName = 'workbench';
+export type ThemeName = 'workbench-dark' | 'workbench-light';
 export type EditorFontSize = 'sm' | 'md' | 'lg';
 export type LineWrapMode = 'wrap' | 'scroll';
 
@@ -82,7 +82,11 @@ export interface DesktopApi {
   createNote: (payload: CreateNotePayload) => Promise<Note>;
   updateNote: (payload: UpdateNotePayload) => Promise<Note>;
   deleteNote: (notebookId: string, noteId: string) => Promise<void>;
-  moveNote: (noteId: string, fromNotebookId: string, toNotebookId: string) => Promise<Note>;
+  moveNote: (
+    noteId: string,
+    fromNotebookId: string,
+    toNotebookId: string
+  ) => Promise<Note>;
   getSettings: () => Promise<AppSettings>;
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
 }

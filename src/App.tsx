@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect } from 'react';
 import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
-import NoteEditor from './components/editor/NoteEditor';
 import useAppState from './hooks/useAppState';
+
+const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
 
 function App() {
   const {
@@ -20,10 +21,12 @@ function App() {
     selectNote,
     setFilter,
     createNotebook,
+    renameNotebook,
     deleteNotebook,
     createNote,
     updateNote,
     deleteNote,
+    moveNote,
     togglePin,
     patchSettings,
   } = useAppState();
@@ -57,6 +60,10 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleCreateNote]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -84,6 +91,7 @@ function App() {
           onItemClick={setFilter}
           totalNotes={notes.length}
           onCreateNotebook={createNotebook}
+          onRenameNotebook={renameNotebook}
           onDeleteNotebook={deleteNotebook}
         />
 
@@ -113,13 +121,27 @@ function App() {
             </div>
           ) : null}
 
-          <NoteEditor
-            note={activeNote}
-            notebooks={notebooks}
-            settings={settings}
-            onUpdateNote={updateNote}
-            onPatchSettings={patchSettings}
-          />
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center px-6">
+                <div
+                  className="workbench-panel rounded-[24px] border px-6 py-5 text-sm text-[var(--text-2)]"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                >
+                  Loading editor workspace...
+                </div>
+              </div>
+            }
+          >
+            <NoteEditor
+              note={activeNote}
+              notebooks={notebooks}
+              settings={settings}
+              onUpdateNote={updateNote}
+              onMoveNote={moveNote}
+              onPatchSettings={patchSettings}
+            />
+          </Suspense>
         </div>
       </div>
     </div>

@@ -2,12 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme='workbench-dark'] {
   color-scheme: dark;
   --font-sans: 'IBM Plex Sans', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --bg-app: #061019;
   --bg-app-accent: rgba(45, 212, 191, 0.12);
+  --bg-app-secondary-accent: rgba(56, 189, 248, 0.08);
+  --bg-app-gradient-start: #071119;
+  --surface-elevated: rgba(11, 23, 33, 0.92);
   --surface-1: rgba(8, 19, 28, 0.94);
   --surface-2: rgba(13, 28, 39, 0.88);
   --surface-3: rgba(17, 36, 49, 0.92);
@@ -26,6 +30,111 @@
   --warning: #fbbf24;
   --danger: #fb7185;
   --shadow-panel: 0 18px 60px rgba(2, 8, 14, 0.42);
+  --selection-bg: rgba(34, 211, 238, 0.25);
+  --scrollbar-thumb: rgba(73, 104, 123, 0.7);
+  --scrollbar-thumb-hover: rgba(103, 134, 154, 0.9);
+  --field-bg: rgba(6, 17, 25, 0.78);
+  --ghost-hover-bg: rgba(17, 36, 49, 0.88);
+  --ghost-active-bg: rgba(18, 48, 64, 0.92);
+  --status-bg: rgba(7, 24, 36, 0.9);
+  --banner-bg: rgba(54, 14, 20, 0.54);
+  --banner-border: rgba(251, 113, 133, 0.28);
+  --banner-text: #fecdd3;
+  --inline-code-bg: rgba(13, 28, 39, 0.95);
+  --inline-code-text: #9ae6b4;
+  --inline-code-border: rgba(103, 134, 154, 0.14);
+  --blockquote-border: rgba(103, 232, 249, 0.28);
+  --callout-bg: rgba(10, 27, 36, 0.82);
+  --callout-border: rgba(103, 232, 249, 0.2);
+  --callout-warning-bg: rgba(45, 31, 5, 0.62);
+  --callout-warning-border: rgba(251, 191, 36, 0.24);
+  --callout-tip-bg: rgba(6, 33, 28, 0.62);
+  --callout-tip-border: rgba(52, 211, 153, 0.24);
+  --code-block-bg: rgba(6, 15, 22, 0.94);
+  --code-block-header-bg: rgba(10, 23, 34, 0.96);
+  --code-block-border: rgba(103, 134, 154, 0.18);
+  --code-copy-bg: rgba(17, 36, 49, 0.68);
+  --code-copy-border: rgba(103, 134, 154, 0.16);
+  --outline-bg: rgba(8, 18, 27, 0.92);
+  --nav-item-border: rgba(103, 134, 154, 0.08);
+  --nav-item-hover-bg: rgba(17, 36, 49, 0.8);
+  --nav-item-active-bg: rgba(18, 48, 64, 0.88);
+  --nav-item-active-border: rgba(34, 211, 238, 0.26);
+  --card-bg: rgba(9, 21, 31, 0.78);
+  --card-border: rgba(103, 134, 154, 0.12);
+  --card-active-bg: rgba(17, 44, 60, 0.88);
+  --card-active-border: rgba(34, 211, 238, 0.32);
+  --action-bg: rgba(7, 18, 27, 0.92);
+  --action-border: rgba(103, 134, 154, 0.18);
+  --cm-gutter-bg: rgba(7, 18, 27, 0.72);
+  --cm-gutter-border: rgba(103, 134, 154, 0.12);
+  --cm-active-line-bg: rgba(17, 36, 49, 0.52);
+}
+
+:root[data-theme='workbench-light'] {
+  color-scheme: light;
+  --bg-app: #eef6fb;
+  --bg-app-accent: rgba(14, 165, 233, 0.16);
+  --bg-app-secondary-accent: rgba(59, 130, 246, 0.12);
+  --bg-app-gradient-start: #f8fcff;
+  --surface-elevated: rgba(255, 255, 255, 0.94);
+  --surface-1: rgba(255, 255, 255, 0.86);
+  --surface-2: rgba(248, 251, 254, 0.92);
+  --surface-3: rgba(236, 245, 251, 0.98);
+  --surface-4: rgba(224, 238, 247, 0.98);
+  --surface-overlay: rgba(255, 255, 255, 0.78);
+  --border-subtle: rgba(81, 125, 151, 0.18);
+  --border-strong: rgba(14, 165, 233, 0.4);
+  --text-1: #0f172a;
+  --text-2: #334155;
+  --text-3: #64748b;
+  --text-dim: #94a3b8;
+  --accent: #0284c7;
+  --accent-strong: #0369a1;
+  --accent-muted: rgba(14, 165, 233, 0.14);
+  --success: #047857;
+  --warning: #b45309;
+  --danger: #be123c;
+  --shadow-panel: 0 18px 40px rgba(148, 163, 184, 0.16);
+  --selection-bg: rgba(14, 165, 233, 0.18);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.68);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.82);
+  --field-bg: rgba(255, 255, 255, 0.9);
+  --ghost-hover-bg: rgba(226, 240, 249, 0.92);
+  --ghost-active-bg: rgba(219, 234, 254, 0.96);
+  --status-bg: rgba(255, 255, 255, 0.92);
+  --banner-bg: rgba(255, 241, 242, 0.9);
+  --banner-border: rgba(251, 113, 133, 0.24);
+  --banner-text: #9f1239;
+  --inline-code-bg: rgba(241, 245, 249, 0.95);
+  --inline-code-text: #065f46;
+  --inline-code-border: rgba(148, 163, 184, 0.24);
+  --blockquote-border: rgba(14, 165, 233, 0.32);
+  --callout-bg: rgba(239, 249, 255, 0.92);
+  --callout-border: rgba(14, 165, 233, 0.2);
+  --callout-warning-bg: rgba(255, 251, 235, 0.96);
+  --callout-warning-border: rgba(245, 158, 11, 0.26);
+  --callout-tip-bg: rgba(236, 253, 245, 0.96);
+  --callout-tip-border: rgba(16, 185, 129, 0.24);
+  --code-block-bg: rgba(248, 250, 252, 1);
+  --code-block-header-bg: rgba(241, 245, 249, 1);
+  --code-block-border: rgba(148, 163, 184, 0.22);
+  --code-copy-bg: rgba(255, 255, 255, 0.92);
+  --code-copy-border: rgba(148, 163, 184, 0.24);
+  --outline-bg: rgba(255, 255, 255, 0.94);
+  --nav-item-border: rgba(148, 163, 184, 0.1);
+  --nav-item-hover-bg: rgba(241, 245, 249, 0.96);
+  --nav-item-active-bg: rgba(224, 242, 254, 0.98);
+  --nav-item-active-border: rgba(14, 165, 233, 0.26);
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --card-border: rgba(148, 163, 184, 0.2);
+  --card-active-bg: rgba(224, 242, 254, 0.92);
+  --card-active-border: rgba(14, 165, 233, 0.32);
+  --action-bg: rgba(255, 255, 255, 0.92);
+  --action-border: rgba(148, 163, 184, 0.22);
+  --cm-gutter-bg: rgba(248, 250, 252, 0.98);
+  --cm-gutter-border: rgba(148, 163, 184, 0.2);
+  --cm-active-line-bg: rgba(226, 232, 240, 0.55);
 }
 
 @layer base {
@@ -46,8 +155,8 @@
   body {
     background:
       radial-gradient(circle at top left, var(--bg-app-accent), transparent 28%),
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 24%),
-      linear-gradient(180deg, #071119 0%, var(--bg-app) 100%);
+      radial-gradient(circle at top right, var(--bg-app-secondary-accent), transparent 24%),
+      linear-gradient(180deg, var(--bg-app-gradient-start) 0%, var(--bg-app) 100%);
     color: var(--text-1);
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
@@ -62,7 +171,7 @@
   }
 
   ::selection {
-    background: rgba(34, 211, 238, 0.25);
+    background: var(--selection-bg);
   }
 
   ::-webkit-scrollbar {
@@ -75,12 +184,12 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(73, 104, 123, 0.7);
+    background: var(--scrollbar-thumb);
     border-radius: 999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(103, 134, 154, 0.9);
+    background: var(--scrollbar-thumb-hover);
   }
 }
 
@@ -117,7 +226,7 @@
 
   .text-field {
     @apply w-full rounded-xl border px-3 py-2 text-sm outline-none transition;
-    background: rgba(6, 17, 25, 0.78);
+    background: var(--field-bg);
     border-color: var(--border-subtle);
     color: var(--text-1);
   }
@@ -140,19 +249,19 @@
 
   .ghost-button:hover {
     color: var(--text-1);
-    background: rgba(17, 36, 49, 0.88);
+    background: var(--ghost-hover-bg);
     border-color: var(--border-subtle);
   }
 
   .ghost-button[data-active='true'] {
     color: var(--text-1);
-    background: rgba(18, 48, 64, 0.92);
+    background: var(--ghost-active-bg);
     border-color: rgba(34, 211, 238, 0.32);
   }
 
   .status-pill {
     @apply inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em];
-    background: rgba(7, 24, 36, 0.9);
+    background: var(--status-bg);
     border: 1px solid var(--border-subtle);
     color: var(--text-2);
   }
@@ -171,9 +280,9 @@
 
   .inline-banner {
     @apply rounded-2xl border px-4 py-3 text-sm;
-    background: rgba(54, 14, 20, 0.54);
-    border-color: rgba(251, 113, 133, 0.28);
-    color: #fecdd3;
+    background: var(--banner-bg);
+    border-color: var(--banner-border);
+    color: var(--banner-text);
   }
 
   .markdown-preview {
@@ -196,9 +305,9 @@
   }
 
   .markdown-preview :where(code):not(pre code) {
-    background: rgba(13, 28, 39, 0.95);
-    color: #9ae6b4;
-    border: 1px solid rgba(103, 134, 154, 0.14);
+    background: var(--inline-code-bg);
+    color: var(--inline-code-text);
+    border: 1px solid var(--inline-code-border);
     border-radius: 0.5rem;
     padding: 0.18rem 0.4rem;
     font-family: var(--font-mono);
@@ -219,7 +328,7 @@
   }
 
   .markdown-preview :where(blockquote) {
-    border-left-color: rgba(103, 232, 249, 0.28);
+    border-left-color: var(--blockquote-border);
     color: var(--text-2);
   }
 
@@ -235,18 +344,18 @@
 
   .markdown-callout {
     @apply my-5 rounded-2xl border p-4;
-    background: rgba(10, 27, 36, 0.82);
-    border-color: rgba(103, 232, 249, 0.2);
+    background: var(--callout-bg);
+    border-color: var(--callout-border);
   }
 
   .markdown-callout[data-callout='warning'] {
-    border-color: rgba(251, 191, 36, 0.24);
-    background: rgba(45, 31, 5, 0.62);
+    border-color: var(--callout-warning-border);
+    background: var(--callout-warning-bg);
   }
 
   .markdown-callout[data-callout='tip'] {
-    border-color: rgba(52, 211, 153, 0.24);
-    background: rgba(6, 33, 28, 0.62);
+    border-color: var(--callout-tip-border);
+    background: var(--callout-tip-bg);
   }
 
   .markdown-callout__title {
@@ -256,22 +365,22 @@
 
   .code-block {
     @apply overflow-hidden rounded-2xl border;
-    border-color: rgba(103, 134, 154, 0.18);
-    background: rgba(6, 15, 22, 0.94);
+    border-color: var(--code-block-border);
+    background: var(--code-block-bg);
   }
 
   .code-block__header {
     @apply flex items-center justify-between border-b px-4 py-2 text-xs uppercase tracking-[0.18em];
-    border-color: rgba(103, 134, 154, 0.18);
-    background: rgba(10, 23, 34, 0.96);
+    border-color: var(--code-block-border);
+    background: var(--code-block-header-bg);
     color: var(--text-3);
   }
 
   .code-block__copy {
     @apply rounded-lg border px-2 py-1 text-[10px] transition;
-    border-color: rgba(103, 134, 154, 0.16);
+    border-color: var(--code-copy-border);
     color: var(--text-2);
-    background: rgba(17, 36, 49, 0.68);
+    background: var(--code-copy-bg);
   }
 
   .code-block__copy:hover {
@@ -292,7 +401,7 @@
 
   .markdown-outline {
     @apply sticky top-0 rounded-2xl border p-4;
-    background: rgba(8, 18, 27, 0.92);
+    background: var(--outline-bg);
     border-color: var(--border-subtle);
   }
 
@@ -327,19 +436,19 @@
 }
 
 .cm-gutters {
-  background: rgba(7, 18, 27, 0.72);
-  border-right: 1px solid rgba(103, 134, 154, 0.12);
+  background: var(--cm-gutter-bg);
+  border-right: 1px solid var(--cm-gutter-border);
   color: var(--text-dim);
 }
 
 .cm-activeLine,
 .cm-activeLineGutter {
-  background: rgba(17, 36, 49, 0.52);
+  background: var(--cm-active-line-bg);
 }
 
 .cm-selectionBackground,
 .cm-editor ::selection {
-  background: rgba(34, 211, 238, 0.2) !important;
+  background: var(--selection-bg) !important;
 }
 
 .cm-content {

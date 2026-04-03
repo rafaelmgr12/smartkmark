@@ -1,15 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { CheckCircle2, LoaderCircle, TriangleAlert } from 'lucide-react';
 import TagBar from './TagBar';
+import NoteMetaBar from './NoteMetaBar';
 import EditorToolbar from './EditorToolbar';
-import MarkdownEditor, { type EditorCommand, type MarkdownEditorHandle } from './MarkdownEditor';
-import NoteContent from './NoteContent';
+import MarkdownEditor, {
+  type EditorCommand,
+  type MarkdownEditorHandle,
+} from './MarkdownEditor';
 import type {
   AppSettings,
   Note,
+  NoteStatus,
+  NoteTag,
   Notebook,
   UpdateNotePayload,
 } from '../../types';
+
+const NoteContent = lazy(() => import('./NoteContent'));
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
@@ -18,7 +33,19 @@ interface NoteEditorProps {
   notebooks: Notebook[];
   settings: AppSettings;
   onUpdateNote: (payload: UpdateNotePayload) => Promise<Note | null>;
+  onMoveNote: (
+    noteId: string,
+    fromNotebookId: string,
+    toNotebookId: string
+  ) => Promise<Note | null>;
   onPatchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings | null>;
+}
+
+interface NoteDraft {
+  body: string;
+  title: string;
+  tags: NoteTag[];
+  status: NoteStatus;
 }
 
 function formatSavedAt(date: Date | null) {
@@ -47,17 +74,31 @@ function formatSaveStatus(status: SaveStatus) {
   }
 }
 
+function areTagsEqual(left: NoteTag[], right: NoteTag[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every(
+    (tag, index) =>
+      tag.label === right[index]?.label && tag.color === right[index]?.color
+  );
+}
+
 export default function NoteEditor({
   note,
   notebooks,
   settings,
   onUpdateNote,
+  onMoveNote,
   onPatchSettings,
 }: NoteEditorProps) {
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [body, setBody] = useState('');
   const [title, setTitle] = useState('');
+  const [tags, setTags] = useState<NoteTag[]>([]);
+  const [status, setStatus] = useState<NoteStatus>('active');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -76,6 +117,8 @@ export default function NoteEditor({
     if (!note) {
       setBody('');
       setTitle('');
+      setTags([]);
+      setStatus('active');
       setSaveStatus('idle');
       setSaveError(null);
       setLastSavedAt(null);
@@ -84,6 +127,8 @@ export default function NoteEditor({
 
     setBody(note.body);
     setTitle(note.title);
+    setTags(note.tags);
+    setStatus(note.status);
     setSaveStatus('saved');
     setSaveError(null);
     setLastSavedAt(new Date(note.updatedAt));
@@ -97,10 +142,27 @@ export default function NoteEditor({
     };
   }, []);
 
-  const saveNote = useCallback(
-    async (draft: { body: string; title: string }) => {
+  const buildDraft = useCallback(
+    (overrides?: Partial<NoteDraft>): NoteDraft => ({
+      body: overrides?.body ?? body,
+      title: overrides?.title ?? title,
+      tags: overrides?.tags ?? tags,
+      status: overrides?.status ?? status,
+    }),
+    [body, status, tags, title]
+  );
+
+  const clearPendingSave = () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  };
+
+  const persistDraft = useCallback(
+    async (draft: NoteDraft) => {
       if (!note) {
-        return;
+        return null;
       }
 
       setSaveStatus('saving');
@@ -111,52 +173,59 @@ export default function NoteEditor({
         notebookId: note.notebookId,
         body: draft.body,
         title: draft.title.trim() || 'Untitled',
+        tags: draft.tags,
+        status: draft.status,
       });
 
       if (!updated) {
         setSaveStatus('error');
-        setSaveError('Unable to save this note. Your changes are still in the editor.');
-        return;
+        setSaveError(
+          'Unable to save this note. Your changes are still in the editor.'
+        );
+        return null;
       }
 
       setTitle(updated.title);
+      setTags(updated.tags);
+      setStatus(updated.status);
       setSaveStatus('saved');
       setLastSavedAt(new Date(updated.updatedAt));
+      return updated;
     },
     [note, onUpdateNote]
   );
 
   const scheduleSave = useCallback(
-    (draft: { body: string; title: string }) => {
+    (draft: NoteDraft) => {
       if (!note) {
         return;
       }
 
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-
+      clearPendingSave();
       setSaveStatus('dirty');
 
       saveTimerRef.current = setTimeout(() => {
-        void saveNote(draft);
+        void persistDraft(draft);
       }, 800);
     },
-    [note, saveNote]
+    [note, persistDraft]
   );
 
-  const saveNow = useCallback(() => {
+  const saveNow = useCallback(async () => {
     if (!note) {
       return;
     }
 
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+    clearPendingSave();
+    await persistDraft(buildDraft());
+  }, [buildDraft, note, persistDraft]);
 
-    void saveNote({ body, title });
-  }, [body, note, saveNote, title]);
+  const hasLocalChanges =
+    note !== null &&
+    (body !== note.body ||
+      title.trim() !== note.title ||
+      status !== note.status ||
+      !areTagsEqual(tags, note.tags));
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -167,7 +236,7 @@ export default function NoteEditor({
       const key = event.key.toLowerCase();
       if (key === 's') {
         event.preventDefault();
-        saveNow();
+        void saveNow();
       }
 
       if (key === 'e') {
@@ -183,26 +252,74 @@ export default function NoteEditor({
   const handleBodyChange = useCallback(
     (nextBody: string) => {
       setBody(nextBody);
-      scheduleSave({ body: nextBody, title });
+      scheduleSave(buildDraft({ body: nextBody }));
     },
-    [scheduleSave, title]
+    [buildDraft, scheduleSave]
   );
 
   const handleTitleChange = (nextTitle: string) => {
     setTitle(nextTitle);
-    scheduleSave({ body, title: nextTitle });
+    scheduleSave(buildDraft({ title: nextTitle }));
   };
 
   const handleTitleBlur = () => {
-    if (!note) {
+    if (!note || !hasLocalChanges) {
       return;
     }
 
-    if (title.trim() === note.title && body === note.body) {
+    void saveNow();
+  };
+
+  const handleStatusChange = async (nextStatus: NoteStatus) => {
+    setStatus(nextStatus);
+    clearPendingSave();
+    await persistDraft(buildDraft({ status: nextStatus }));
+  };
+
+  const handleAddTag = async (tag: NoteTag) => {
+    const exists = tags.some(
+      (current) => current.label.toLowerCase() === tag.label.toLowerCase()
+    );
+
+    if (exists) {
+      setSaveError(`Tag "${tag.label}" already exists on this note.`);
       return;
     }
 
-    saveNow();
+    const nextTags = [...tags, tag];
+    setTags(nextTags);
+    clearPendingSave();
+    await persistDraft(buildDraft({ tags: nextTags }));
+  };
+
+  const handleRemoveTag = async (label: string) => {
+    const nextTags = tags.filter((tag) => tag.label !== label);
+    setTags(nextTags);
+    clearPendingSave();
+    await persistDraft(buildDraft({ tags: nextTags }));
+  };
+
+  const handleMoveNote = async (nextNotebookId: string) => {
+    if (!note || nextNotebookId === note.notebookId) {
+      return;
+    }
+
+    clearPendingSave();
+
+    const persisted = await persistDraft(buildDraft());
+    if (!persisted) {
+      return;
+    }
+
+    const moved = await onMoveNote(note.id, note.notebookId, nextNotebookId);
+    if (!moved) {
+      setSaveStatus('error');
+      setSaveError('Unable to move this note to the selected notebook.');
+      return;
+    }
+
+    setSaveStatus('saved');
+    setLastSavedAt(new Date(moved.updatedAt));
   };
 
   const applyCommand = (command: EditorCommand) => {
@@ -259,7 +376,9 @@ export default function NoteEditor({
 
         <div className="flex items-center gap-2">
           <span className="status-pill" data-tone={saveTone}>
-            {saveStatus === 'saving' ? <LoaderCircle size={12} className="animate-spin" /> : null}
+            {saveStatus === 'saving' ? (
+              <LoaderCircle size={12} className="animate-spin" />
+            ) : null}
             {saveStatus === 'error' ? <TriangleAlert size={12} /> : null}
             {saveStatus === 'saved' ? <CheckCircle2 size={12} /> : null}
             {formatSaveStatus(saveStatus)}
@@ -268,17 +387,32 @@ export default function NoteEditor({
         </div>
       </div>
 
-      <TagBar notebook={notebook?.name} tags={note.tags} />
+      <TagBar notebook={notebook?.name} tags={tags} />
+
+      <NoteMetaBar
+        notebookId={note.notebookId}
+        notebooks={notebooks}
+        status={status}
+        tags={tags}
+        onNotebookChange={(value) => void handleMoveNote(value)}
+        onStatusChange={(value) => void handleStatusChange(value)}
+        onAddTag={(value) => void handleAddTag(value)}
+        onRemoveTag={(label) => void handleRemoveTag(label)}
+      />
 
       <EditorToolbar
         isPreviewOpen={settings.previewOpen}
+        theme={settings.theme}
         fontSize={settings.editorFontSize}
         lineWrap={settings.lineWrap}
         onCommand={applyCommand}
         onTogglePreview={() =>
           void onPatchSettings({ previewOpen: !settings.previewOpen })
         }
-        onFontSizeChange={(value) => void onPatchSettings({ editorFontSize: value })}
+        onThemeChange={(value) => void onPatchSettings({ theme: value })}
+        onFontSizeChange={(value) =>
+          void onPatchSettings({ editorFontSize: value })
+        }
         onLineWrapChange={(value) => void onPatchSettings({ lineWrap: value })}
       />
 
@@ -301,7 +435,7 @@ export default function NoteEditor({
             ref={editorRef}
             value={body}
             onChange={handleBodyChange}
-            onSave={saveNow}
+            onSave={() => void saveNow()}
             onTogglePreview={() =>
               void onPatchSettings({ previewOpen: !settings.previewOpen })
             }
@@ -312,7 +446,15 @@ export default function NoteEditor({
 
         {settings.previewOpen ? (
           <div className="hidden min-w-0 flex-1 xl:block">
-            <NoteContent content={body} />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-[var(--text-2)]">
+                  Preparing preview...
+                </div>
+              }
+            >
+              <NoteContent content={body} />
+            </Suspense>
           </div>
         ) : null}
       </div>

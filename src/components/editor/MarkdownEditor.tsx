@@ -223,7 +223,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
             closeBrackets: true,
             autocompletion: true,
           }}
-          theme="dark"
           extensions={extensions}
           onCreateEditor={(view) => {
             viewRef.current = view;

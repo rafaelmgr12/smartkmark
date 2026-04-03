@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import {
+  Check,
   FileText,
   Pin,
+  Pencil,
   FolderOpen,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 import SidebarSection from './SidebarSection';
@@ -17,6 +20,7 @@ interface SidebarProps {
   onItemClick: (id: string) => void;
   totalNotes: number;
   onCreateNotebook: (name: string) => Promise<Notebook | null>;
+  onRenameNotebook: (id: string, name: string) => Promise<Notebook | null>;
   onDeleteNotebook: (id: string) => Promise<void>;
 }
 
@@ -26,10 +30,13 @@ export default function Sidebar({
   onItemClick,
   totalNotes,
   onCreateNotebook,
+  onRenameNotebook,
   onDeleteNotebook,
 }: SidebarProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const handleCreate = async () => {
     const trimmed = newName.trim();
@@ -37,6 +44,29 @@ export default function Sidebar({
     await onCreateNotebook(trimmed);
     setNewName('');
     setIsCreating(false);
+  };
+
+  const startRename = (notebook: Notebook) => {
+    setEditingNotebookId(notebook.id);
+    setEditingName(notebook.name);
+  };
+
+  const cancelRename = () => {
+    setEditingNotebookId(null);
+    setEditingName('');
+  };
+
+  const handleRename = async (notebookId: string) => {
+    const trimmed = editingName.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+
+    const renamed = await onRenameNotebook(notebookId, trimmed);
+    if (renamed) {
+      cancelRename();
+    }
   };
 
   return (
@@ -76,29 +106,92 @@ export default function Sidebar({
         <SidebarSection title="Notebooks">
           {notebooks.map((nb) => (
             <div key={nb.id} className="group relative">
-              <SidebarItem
-                label={nb.name}
-                icon={FolderOpen}
-                active={activeItem === nb.id}
-                depth={1}
-                onClick={() => onItemClick(nb.id)}
-              />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (
-                    window.confirm(`Delete notebook "${nb.name}" and all its notes?`)
-                  ) {
-                    void onDeleteNotebook(nb.id);
-                  }
-                }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 transition group-hover:opacity-100"
-                style={{ color: 'var(--text-dim)' }}
-                title={`Delete ${nb.name}`}
-              >
-                <Trash2 size={12} />
-              </button>
+              {editingNotebookId === nb.id ? (
+                <div className="mx-1 rounded-xl border px-2 py-2" style={{
+                  borderColor: 'var(--border-subtle)',
+                  background: 'var(--surface-elevated)',
+                }}>
+                  <input
+                    autoFocus
+                    aria-label={`Rename ${nb.name}`}
+                    value={editingName}
+                    onChange={(event) => setEditingName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        void handleRename(nb.id);
+                      }
+                      if (event.key === 'Escape') {
+                        cancelRename();
+                      }
+                    }}
+                    onBlur={() => {
+                      void handleRename(nb.id);
+                    }}
+                    className="text-field px-3 py-2 text-xs"
+                    placeholder="Notebook name..."
+                  />
+                  <div className="mt-2 flex justify-end gap-1">
+                    <button
+                      type="button"
+                      className="ghost-button px-2 py-1"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => cancelRename()}
+                      title="Cancel rename"
+                    >
+                      <X size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button px-2 py-1"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => void handleRename(nb.id)}
+                      title="Save rename"
+                    >
+                      <Check size={12} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <SidebarItem
+                    label={nb.name}
+                    icon={FolderOpen}
+                    active={activeItem === nb.id}
+                    depth={1}
+                    onClick={() => onItemClick(nb.id)}
+                  />
+                  <div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startRename(nb);
+                      }}
+                      className="rounded p-1"
+                      style={{ color: 'var(--text-dim)' }}
+                      title={`Rename ${nb.name}`}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (
+                          window.confirm(`Delete notebook "${nb.name}" and all its notes?`)
+                        ) {
+                          void onDeleteNotebook(nb.id);
+                        }
+                      }}
+                      className="rounded p-1"
+                      style={{ color: 'var(--text-dim)' }}
+                      title={`Delete ${nb.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
 
@@ -107,6 +200,7 @@ export default function Sidebar({
             <div className="px-2 py-1">
               <input
                 autoFocus
+                aria-label="New notebook name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
@@ -126,6 +220,7 @@ export default function Sidebar({
           ) : (
             <button
               type="button"
+              aria-label="Create notebook"
               onClick={() => setIsCreating(true)}
               className="ghost-button ml-2 w-[calc(100%-1rem)] justify-start px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
               style={{ paddingLeft: '1.5rem' }}

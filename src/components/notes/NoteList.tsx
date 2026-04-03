@@ -69,7 +69,7 @@ export default function NoteList({
             className="rounded-2xl border px-4 py-8 text-center"
             style={{
               borderColor: 'var(--border-subtle)',
-              background: 'rgba(9, 21, 31, 0.78)',
+              background: 'var(--card-bg)',
             }}
           >
             <p className="text-sm font-medium text-[var(--text-1)]">No notes found.</p>
@@ -95,8 +95,8 @@ export default function NoteList({
                   }}
                   className="rounded-lg border p-1.5 transition"
                   style={{
-                    borderColor: 'rgba(103, 134, 154, 0.18)',
-                    background: 'rgba(7, 18, 27, 0.92)',
+                    borderColor: 'var(--action-border)',
+                    background: 'var(--action-bg)',
                     color: note.pinned ? 'var(--warning)' : 'var(--text-3)',
                   }}
                   title={note.pinned ? 'Unpin' : 'Pin'}
@@ -113,8 +113,8 @@ export default function NoteList({
                   }}
                   className="rounded-lg border p-1.5 transition"
                   style={{
-                    borderColor: 'rgba(103, 134, 154, 0.18)',
-                    background: 'rgba(7, 18, 27, 0.92)',
+                    borderColor: 'var(--action-border)',
+                    background: 'var(--action-bg)',
                     color: 'var(--danger)',
                   }}
                   title="Delete"

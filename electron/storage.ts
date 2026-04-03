@@ -47,14 +47,14 @@ export interface DesktopError {
 }
 
 export interface AppSettings {
-  theme: 'workbench';
+  theme: 'workbench-dark' | 'workbench-light';
   editorFontSize: 'sm' | 'md' | 'lg';
   lineWrap: 'wrap' | 'scroll';
   previewOpen: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'workbench',
+  theme: 'workbench-dark',
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,
@@ -179,7 +179,10 @@ function normalizeSettings(value: unknown): AppSettings {
   const raw = value as Partial<AppSettings>;
 
   return {
-    theme: raw.theme === 'workbench' ? raw.theme : DEFAULT_SETTINGS.theme,
+    theme:
+      raw.theme === 'workbench-dark' || raw.theme === 'workbench-light'
+        ? raw.theme
+        : DEFAULT_SETTINGS.theme,
     editorFontSize:
       raw.editorFontSize === 'sm' ||
       raw.editorFontSize === 'md' ||

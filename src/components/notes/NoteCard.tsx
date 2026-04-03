@@ -27,11 +27,9 @@ export default function NoteCard({ note, active = false, onClick }: NoteCardProp
       className="w-full rounded-2xl border px-4 py-3 text-left transition"
       style={{
         borderColor: active
-          ? 'rgba(34, 211, 238, 0.32)'
-          : 'rgba(103, 134, 154, 0.12)',
-        background: active
-          ? 'rgba(17, 44, 60, 0.88)'
-          : 'rgba(9, 21, 31, 0.78)',
+          ? 'var(--card-active-border)'
+          : 'var(--card-border)',
+        background: active ? 'var(--card-active-bg)' : 'var(--card-bg)',
       }}
     >
       <div className="flex items-start gap-1.5">
