@@ -1,11 +1,8 @@
 import { vi } from 'vitest';
 import type {
-  CreateNotePayload,
   DesktopApi,
   Note,
-  NoteMeta,
   Notebook,
-  UpdateNotePayload,
 } from '../types';
 import {
   createDesktopSeed,
