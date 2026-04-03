@@ -193,7 +193,7 @@ test('renderer smoke covers notebook rename, note move, metadata edits, and them
     page.getByRole('button', { name: 'Remove api tag', exact: true })
   ).toBeVisible();
 
-  await page.getByLabel('Theme').selectOption('workbench-light');
+  await page.getByRole('button', { name: 'Toggle theme' }).click();
   await expect(page.locator('html')).toHaveAttribute(
     'data-theme',
     'workbench-light'

@@ -285,6 +285,39 @@
     color: var(--text-dim);
   }
 
+  .window-chrome__theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--field-bg);
+    color: var(--text-2);
+    outline: none;
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .window-chrome__theme-toggle:hover {
+    background: var(--ghost-hover-bg);
+    color: var(--text-1);
+  }
+
+  .window-chrome__theme-toggle[aria-pressed='true'] {
+    border-color: var(--border-strong);
+    color: var(--accent-strong);
+  }
+
+  .window-chrome__theme-toggle:focus {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  }
+
   .window-chrome__control select {
     border-radius: 999px;
     border: 1px solid var(--border-subtle);

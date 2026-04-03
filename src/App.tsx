@@ -1,8 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect } from 'react';
+import { Moon, Sun } from 'lucide-react';
 import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
 import useAppState from './hooks/useAppState';
-import type { LayoutMode, ThemeName } from './types';
+import type { LayoutMode } from './types';
 
 const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
 
@@ -10,11 +11,6 @@ const LAYOUT_LABELS: Record<LayoutMode, string> = {
   workbench: 'Workbench',
   writer: 'No notebooks',
   editor: 'Editor only',
-};
-
-const THEME_LABELS: Record<ThemeName, string> = {
-  'workbench-dark': 'Dark',
-  'workbench-light': 'Light',
 };
 
 function App() {
@@ -80,6 +76,7 @@ function App() {
   const showSidebar = settings.layoutMode === 'workbench';
   const showNoteList =
     settings.layoutMode === 'workbench' || settings.layoutMode === 'writer';
+  const isLightTheme = settings.theme === 'workbench-light';
 
   if (loading) {
     return (
@@ -109,22 +106,20 @@ function App() {
             <span className="window-chrome__title">Developer Workbench</span>
           </div>
           <div className="window-chrome__controls window-no-drag">
-            <label className="window-chrome__control">
-              <span>Theme</span>
-              <select
-                aria-label="Theme"
-                value={settings.theme}
-                onChange={(event) =>
-                  void patchSettings({ theme: event.target.value as ThemeName })
-                }
-              >
-                {Object.entries(THEME_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <button
+              type="button"
+              aria-label="Toggle theme"
+              title={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+              aria-pressed={isLightTheme}
+              className="window-chrome__theme-toggle"
+              onClick={() =>
+                void patchSettings({
+                  theme: isLightTheme ? 'workbench-dark' : 'workbench-light',
+                })
+              }
+            >
+              {isLightTheme ? <Moon size={15} /> : <Sun size={15} />}
+            </button>
 
             <label className="window-chrome__control">
               <span>Layout</span>
