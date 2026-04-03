@@ -20,7 +20,6 @@ import {
   listDeletedNotes,
   listNotebooks,
   moveNote,
-  purgeDeletedNotes,
   purgeNote,
   rebuildNoteIndex,
   renameNotebook,
