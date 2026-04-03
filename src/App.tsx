@@ -1,9 +1,10 @@
-import { Suspense, lazy, useCallback, useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
+import QuickOpenModal from './components/search/QuickOpenModal';
 import useAppState from './hooks/useAppState';
-import type { LayoutMode } from './types';
+import type { LayoutMode, NoteMeta } from './types';
 
 const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
 
@@ -41,6 +42,8 @@ function App() {
     togglePin,
     patchSettings,
   } = useAppState();
+  const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
+  const [quickOpenQuery, setQuickOpenQuery] = useState('');
 
   const getTargetNotebook = useCallback((): string => {
     if (activeFilter !== 'all' && activeFilter !== 'pinned') {
@@ -74,8 +77,30 @@ function App() {
     setLayoutMode(nextLayout);
   }, [setLayoutMode, settings.layoutMode]);
 
+  const openQuickOpen = useCallback(() => {
+    setIsQuickOpenVisible(true);
+  }, []);
+
+  const closeQuickOpen = useCallback(() => {
+    setIsQuickOpenVisible(false);
+    setQuickOpenQuery('');
+  }, []);
+
+  const handleQuickOpenSelection = useCallback(
+    async (note: NoteMeta) => {
+      setFilter(note.notebookId);
+      await selectNote(note.id);
+      closeQuickOpen();
+    },
+    [closeQuickOpen, selectNote, setFilter]
+  );
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
@@ -85,6 +110,12 @@ function App() {
       if (key === 'n') {
         event.preventDefault();
         void handleCreateNote();
+        return;
+      }
+
+      if (key === 'k') {
+        event.preventDefault();
+        openQuickOpen();
         return;
       }
 
@@ -108,7 +139,7 @@ function App() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleCreateNote, setLayoutMode]);
+  }, [handleCreateNote, openQuickOpen, setLayoutMode]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
@@ -139,6 +170,15 @@ function App() {
 
   return (
     <div className="workbench-shell p-4 pt-14">
+      <QuickOpenModal
+        open={isQuickOpenVisible}
+        notes={notes}
+        selectedNoteId={selectedNoteId}
+        query={quickOpenQuery}
+        onQueryChange={setQuickOpenQuery}
+        onClose={closeQuickOpen}
+        onSelectNote={(note) => void handleQuickOpenSelection(note)}
+      />
       <div className="window-chrome">
         <div className="window-chrome__pill">
           <div className="window-chrome__identity">

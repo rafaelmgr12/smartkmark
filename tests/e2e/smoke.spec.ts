@@ -193,6 +193,14 @@ test('renderer smoke covers notebook rename, note move, metadata edits, and them
     page.getByRole('button', { name: 'Remove api tag', exact: true })
   ).toBeVisible();
 
+  await page.keyboard.press('Control+K');
+  await expect(page.getByRole('dialog', { name: 'Quick open' })).toBeVisible();
+  await page.getByLabel('Quick open search').fill('api');
+  await page.getByLabel('Quick open search').press('Enter');
+  await expect(
+    page.getByRole('dialog', { name: 'Quick open' })
+  ).toBeHidden();
+
   await page.getByRole('button', { name: 'Toggle theme' }).click();
   await expect(page.locator('html')).toHaveAttribute(
     'data-theme',
