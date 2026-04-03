@@ -22,9 +22,8 @@ export default function IconButton({
       type="button"
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center justify-center rounded p-1.5 transition-colors hover:bg-slate-700 ${
-        active ? 'bg-slate-700 text-slate-200' : 'text-slate-400'
-      } ${className}`}
+      data-active={active}
+      className={`ghost-button justify-center p-2 ${className}`}
     >
       <Icon size={size} />
     </button>

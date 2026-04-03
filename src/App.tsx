@@ -13,7 +13,10 @@ function App() {
     selectedNoteId,
     activeNote,
     activeFilter,
+    settings,
     loading,
+    error,
+    clearError,
     selectNote,
     setFilter,
     createNotebook,
@@ -22,15 +25,14 @@ function App() {
     updateNote,
     deleteNote,
     togglePin,
+    patchSettings,
   } = useAppState();
 
-  // Determine which notebook to create a new note in
   const getTargetNotebook = useCallback((): string => {
-    // If filtering by a specific notebook, use that
     if (activeFilter !== 'all' && activeFilter !== 'pinned') {
       return activeFilter;
     }
-    // Otherwise default to first notebook (usually "Inbox")
+
     return notebooks[0]?.id ?? 'Inbox';
   }, [activeFilter, notebooks]);
 
@@ -41,52 +43,85 @@ function App() {
       title: 'New Note',
       body: '',
     });
-  }, [getTargetNotebook, createNote]);
+  }, [createNote, getTargetNotebook]);
 
-  // Global Ctrl+N shortcut
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
         void handleCreateNote();
       }
     };
+
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleCreateNote]);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-850 text-slate-500">
-        Loading...
+      <div className="flex h-screen items-center justify-center">
+        <div
+          className="workbench-panel rounded-[28px] border px-10 py-8"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-dim)]">
+            SmartKMark
+          </p>
+          <p className="mt-2 text-lg font-semibold text-[var(--text-1)]">
+            Loading your local workspace...
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-slate-850 font-sans text-slate-300">
-      <Sidebar
-        notebooks={notebooks}
-        activeItem={activeFilter}
-        onItemClick={setFilter}
-        totalNotes={notes.length}
-        onCreateNotebook={createNotebook}
-        onDeleteNotebook={deleteNotebook}
-      />
-      <NoteList
-        title={filterTitle}
-        notes={filteredNotes}
-        selectedNoteId={selectedNoteId}
-        onNoteSelect={(id) => void selectNote(id)}
-        onCreateNote={() => void handleCreateNote()}
-        onDeleteNote={(nbId, nId) => void deleteNote(nbId, nId)}
-        onTogglePin={(id) => void togglePin(id)}
-      />
-      <NoteEditor
-        note={activeNote}
-        notebooks={notebooks}
-        onUpdateNote={updateNote}
-      />
+    <div className="workbench-shell p-4">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[28px] border border-[var(--border-subtle)]">
+        <Sidebar
+          notebooks={notebooks}
+          activeItem={activeFilter}
+          onItemClick={setFilter}
+          totalNotes={notes.length}
+          onCreateNotebook={createNotebook}
+          onDeleteNotebook={deleteNotebook}
+        />
+
+        <NoteList
+          title={filterTitle}
+          notes={filteredNotes}
+          selectedNoteId={selectedNoteId}
+          onNoteSelect={(id) => void selectNote(id)}
+          onCreateNote={() => void handleCreateNote()}
+          onDeleteNote={(notebookId, noteId) => void deleteNote(notebookId, noteId)}
+          onTogglePin={(id) => void togglePin(id)}
+        />
+
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden workbench-panel">
+          {error ? (
+            <div className="absolute left-5 right-5 top-5 z-10">
+              <div className="inline-banner flex items-center justify-between gap-4">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  className="ghost-button px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
+                  onClick={clearError}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <NoteEditor
+            note={activeNote}
+            notebooks={notebooks}
+            settings={settings}
+            onUpdateNote={updateNote}
+            onPatchSettings={patchSettings}
+          />
+        </div>
+      </div>
     </div>
   );
 }

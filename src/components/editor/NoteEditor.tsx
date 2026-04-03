@@ -1,202 +1,321 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, LoaderCircle, TriangleAlert } from 'lucide-react';
 import TagBar from './TagBar';
 import EditorToolbar from './EditorToolbar';
+import MarkdownEditor, { type EditorCommand, type MarkdownEditorHandle } from './MarkdownEditor';
 import NoteContent from './NoteContent';
-import { wrapSelection, insertLink } from '../../lib/markdown-shortcuts';
-import type { Note, Notebook, UpdateNotePayload } from '../../types';
+import type {
+  AppSettings,
+  Note,
+  Notebook,
+  UpdateNotePayload,
+} from '../../types';
+
+type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 interface NoteEditorProps {
   note: Note | null;
   notebooks: Notebook[];
+  settings: AppSettings;
   onUpdateNote: (payload: UpdateNotePayload) => Promise<Note | null>;
+  onPatchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings | null>;
+}
+
+function formatSavedAt(date: Date | null) {
+  if (!date) {
+    return 'Waiting for changes';
+  }
+
+  return `Saved at ${date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function formatSaveStatus(status: SaveStatus) {
+  switch (status) {
+    case 'dirty':
+      return 'Unsaved';
+    case 'saving':
+      return 'Saving';
+    case 'saved':
+      return 'Saved';
+    case 'error':
+      return 'Error';
+    default:
+      return 'Idle';
+  }
 }
 
 export default function NoteEditor({
   note,
   notebooks,
+  settings,
   onUpdateNote,
+  onPatchSettings,
 }: NoteEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<MarkdownEditorHandle>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [body, setBody] = useState('');
   const [title, setTitle] = useState('');
-  const [isPreview, setIsPreview] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
-  // Sync local state when a different note is selected
-  useEffect(() => {
-    if (note) {
-      setBody(note.body);
-      setTitle(note.title);
-      setIsPreview(false);
-    }
-  }, [note?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Debounced auto-save
-  const scheduleSave = useCallback(
-    (newBody: string, newTitle?: string) => {
-      if (!note) return;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        void onUpdateNote({
-          id: note.id,
-          notebookId: note.notebookId,
-          body: newBody,
-          title: newTitle ?? title,
-        });
-      }, 800);
-    },
-    [note, title, onUpdateNote]
+  const notebook = useMemo(
+    () => notebooks.find((item) => item.id === note?.notebookId),
+    [note?.notebookId, notebooks]
   );
 
-  // Immediate save (Ctrl+S)
-  const saveNow = useCallback(() => {
-    if (!note) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    void onUpdateNote({
-      id: note.id,
-      notebookId: note.notebookId,
-      body,
-      title,
-    });
-  }, [note, body, title, onUpdateNote]);
+  useEffect(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
 
-  const handleBodyChange = (value: string) => {
-    setBody(value);
-    scheduleSave(value);
+    if (!note) {
+      setBody('');
+      setTitle('');
+      setSaveStatus('idle');
+      setSaveError(null);
+      setLastSavedAt(null);
+      return;
+    }
+
+    setBody(note.body);
+    setTitle(note.title);
+    setSaveStatus('saved');
+    setSaveError(null);
+    setLastSavedAt(new Date(note.updatedAt));
+  }, [note]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  const saveNote = useCallback(
+    async (draft: { body: string; title: string }) => {
+      if (!note) {
+        return;
+      }
+
+      setSaveStatus('saving');
+      setSaveError(null);
+
+      const updated = await onUpdateNote({
+        id: note.id,
+        notebookId: note.notebookId,
+        body: draft.body,
+        title: draft.title.trim() || 'Untitled',
+      });
+
+      if (!updated) {
+        setSaveStatus('error');
+        setSaveError('Unable to save this note. Your changes are still in the editor.');
+        return;
+      }
+
+      setTitle(updated.title);
+      setSaveStatus('saved');
+      setLastSavedAt(new Date(updated.updatedAt));
+    },
+    [note, onUpdateNote]
+  );
+
+  const scheduleSave = useCallback(
+    (draft: { body: string; title: string }) => {
+      if (!note) {
+        return;
+      }
+
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+
+      setSaveStatus('dirty');
+
+      saveTimerRef.current = setTimeout(() => {
+        void saveNote(draft);
+      }, 800);
+    },
+    [note, saveNote]
+  );
+
+  const saveNow = useCallback(() => {
+    if (!note) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    void saveNote({ body, title });
+  }, [body, note, saveNote, title]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 's') {
+        event.preventDefault();
+        saveNow();
+      }
+
+      if (key === 'e') {
+        event.preventDefault();
+        void onPatchSettings({ previewOpen: !settings.previewOpen });
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onPatchSettings, saveNow, settings.previewOpen]);
+
+  const handleBodyChange = useCallback(
+    (nextBody: string) => {
+      setBody(nextBody);
+      scheduleSave({ body: nextBody, title });
+    },
+    [scheduleSave, title]
+  );
+
+  const handleTitleChange = (nextTitle: string) => {
+    setTitle(nextTitle);
+    scheduleSave({ body, title: nextTitle });
   };
 
   const handleTitleBlur = () => {
-    if (!note || title === note.title) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    void onUpdateNote({
-      id: note.id,
-      notebookId: note.notebookId,
-      body,
-      title,
-    });
+    if (!note) {
+      return;
+    }
+
+    if (title.trim() === note.title && body === note.body) {
+      return;
+    }
+
+    saveNow();
   };
 
-  // Keyboard shortcuts on the textarea
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const isMeta = e.ctrlKey || e.metaKey;
-    if (!isMeta) return;
-
-    const el = textareaRef.current;
-    if (!el) return;
-
-    const key = e.key.toLowerCase();
-
-    if (key === 'b') {
-      e.preventDefault();
-      const result = wrapSelection(el, '**');
-      handleBodyChange(result.value);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(result.selectionStart, result.selectionEnd);
-      });
-    }
-
-    if (key === 'i') {
-      e.preventDefault();
-      const result = wrapSelection(el, '_');
-      handleBodyChange(result.value);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(result.selectionStart, result.selectionEnd);
-      });
-    }
-
-    if (key === 'k') {
-      e.preventDefault();
-      const result = insertLink(el);
-      handleBodyChange(result.value);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(result.selectionStart, result.selectionEnd);
-      });
-    }
-
-    if (key === 's') {
-      e.preventDefault();
-      saveNow();
-    }
-
-    if (key === 'e') {
-      e.preventDefault();
-      setIsPreview((prev) => !prev);
-    }
+  const applyCommand = (command: EditorCommand) => {
+    editorRef.current?.applyCommand(command);
   };
 
-  // Global Ctrl+S / Ctrl+N / Ctrl+E handler (when focus is not on textarea)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const isMeta = e.ctrlKey || e.metaKey;
-      if (!isMeta) return;
-      const key = e.key.toLowerCase();
-
-      if (key === 's') {
-        e.preventDefault();
-        saveNow();
-      }
-      if (key === 'e') {
-        e.preventDefault();
-        setIsPreview((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [saveNow]);
+  const saveTone =
+    saveStatus === 'error'
+      ? 'danger'
+      : saveStatus === 'saving' || saveStatus === 'dirty'
+        ? 'warning'
+        : 'success';
 
   if (!note) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-slate-850">
-        <p className="text-sm text-slate-600">
-          Select a note to start editing
-        </p>
+      <div className="flex flex-1 items-center justify-center">
+        <div
+          className="workbench-panel max-w-lg rounded-[28px] border px-10 py-12 text-center"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-dim)]">
+            Developer Workbench
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-[var(--text-1)]">
+            Pick a note to start writing.
+          </h2>
+          <p className="mt-3 text-sm leading-7">
+            SmartKMark now treats the editor like a coding workspace: markdown,
+            formulas, code fences and preview are all ready on the right panel.
+          </p>
+        </div>
       </div>
     );
   }
 
-  const notebook = notebooks.find((nb) => nb.id === note.notebookId);
-
   return (
-    <div className="flex flex-1 flex-col bg-slate-850">
-      {/* Title */}
-      <div className="px-5 pt-5 pb-1">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={handleTitleBlur}
-          className="w-full bg-transparent text-xl font-bold text-slate-100 outline-none placeholder-slate-600"
-          placeholder="Note title..."
-        />
+    <section className="flex min-w-0 flex-1 flex-col">
+      <div
+        className="flex items-center justify-between border-b px-5 py-4"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-dim)]">
+            {notebook?.name ?? 'Workspace'}
+          </p>
+          <input
+            value={title}
+            onChange={(event) => handleTitleChange(event.target.value)}
+            onBlur={handleTitleBlur}
+            className="mt-1 w-full bg-transparent text-2xl font-semibold text-[var(--text-1)] outline-none placeholder:text-[var(--text-dim)]"
+            placeholder="Note title..."
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="status-pill" data-tone={saveTone}>
+            {saveStatus === 'saving' ? <LoaderCircle size={12} className="animate-spin" /> : null}
+            {saveStatus === 'error' ? <TriangleAlert size={12} /> : null}
+            {saveStatus === 'saved' ? <CheckCircle2 size={12} /> : null}
+            {formatSaveStatus(saveStatus)}
+          </span>
+          <span className="status-pill">{formatSavedAt(lastSavedAt)}</span>
+        </div>
       </div>
 
-      {/* Tags */}
       <TagBar notebook={notebook?.name} tags={note.tags} />
 
-      {/* Toolbar */}
       <EditorToolbar
-        textareaRef={textareaRef}
-        onContentChange={handleBodyChange}
-        isPreview={isPreview}
-        onTogglePreview={() => setIsPreview((p) => !p)}
+        isPreviewOpen={settings.previewOpen}
+        fontSize={settings.editorFontSize}
+        lineWrap={settings.lineWrap}
+        onCommand={applyCommand}
+        onTogglePreview={() =>
+          void onPatchSettings({ previewOpen: !settings.previewOpen })
+        }
+        onFontSizeChange={(value) => void onPatchSettings({ editorFontSize: value })}
+        onLineWrapChange={(value) => void onPatchSettings({ lineWrap: value })}
       />
 
-      {/* Content: edit or preview */}
-      {isPreview ? (
-        <NoteContent content={body} />
-      ) : (
-        <textarea
-          ref={textareaRef}
-          value={body}
-          onChange={(e) => handleBodyChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          spellCheck={false}
-          className="flex-1 resize-none bg-transparent px-5 py-4 font-mono text-sm leading-relaxed text-slate-300 outline-none"
-          placeholder="Start writing markdown..."
-        />
-      )}
-    </div>
+      {saveError ? (
+        <div className="px-5 pt-4">
+          <div className="inline-banner">{saveError}</div>
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className="min-w-0 flex-1 border-r"
+          style={{
+            borderColor: settings.previewOpen
+              ? 'var(--border-subtle)'
+              : 'transparent',
+          }}
+        >
+          <MarkdownEditor
+            ref={editorRef}
+            value={body}
+            onChange={handleBodyChange}
+            onSave={saveNow}
+            onTogglePreview={() =>
+              void onPatchSettings({ previewOpen: !settings.previewOpen })
+            }
+            fontSize={settings.editorFontSize}
+            lineWrap={settings.lineWrap}
+          />
+        </div>
+
+        {settings.previewOpen ? (
+          <div className="hidden min-w-0 flex-1 xl:block">
+            <NoteContent content={body} />
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }

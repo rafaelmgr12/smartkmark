@@ -40,9 +40,23 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-slate-700/50 bg-slate-900">
-      {/* Header */}
-      <div className="px-3 pt-4 pb-2">
+    <aside
+      className="workbench-panel flex h-full w-64 shrink-0 flex-col border-r"
+      style={{ borderColor: 'var(--border-subtle)' }}
+    >
+      <div className="px-4 pt-5 pb-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-dim)]">
+          SmartKMark
+        </p>
+        <h1 className="mt-2 text-xl font-semibold text-[var(--text-1)]">
+          Developer Workbench
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-2)]">
+          Local-first markdown notes for code, docs and formulas.
+        </p>
+      </div>
+
+      <div className="px-3 pb-3">
         <SidebarItem
           label="All Notes"
           icon={FileText}
@@ -58,7 +72,6 @@ export default function Sidebar({
         />
       </div>
 
-      {/* Scrollable nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-2">
         <SidebarSection title="Notebooks">
           {notebooks.map((nb) => (
@@ -74,9 +87,14 @@ export default function Sidebar({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  void onDeleteNotebook(nb.id);
+                  if (
+                    window.confirm(`Delete notebook "${nb.name}" and all its notes?`)
+                  ) {
+                    void onDeleteNotebook(nb.id);
+                  }
                 }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-slate-600 opacity-0 transition hover:text-red-400 group-hover:opacity-100"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 transition group-hover:opacity-100"
+                style={{ color: 'var(--text-dim)' }}
                 title={`Delete ${nb.name}`}
               >
                 <Trash2 size={12} />
@@ -102,24 +120,23 @@ export default function Sidebar({
                   if (!newName.trim()) setIsCreating(false);
                 }}
                 placeholder="Notebook name..."
-                className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none focus:border-indigo-500"
+                className="text-field px-3 py-2 text-xs"
               />
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setIsCreating(true)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-400"
+              className="ghost-button ml-2 w-[calc(100%-1rem)] justify-start px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
               style={{ paddingLeft: '1.5rem' }}
             >
               <Plus size={14} />
-              New Notebook
+              New notebook
             </button>
           )}
         </SidebarSection>
       </nav>
 
-      {/* User profile */}
       <UserProfile name="SmartKMark" syncedAt={new Date().toLocaleTimeString()} />
     </aside>
   );

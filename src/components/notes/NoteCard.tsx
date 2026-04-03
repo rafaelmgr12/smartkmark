@@ -24,21 +24,32 @@ export default function NoteCard({ note, active = false, onClick }: NoteCardProp
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
-        active
-          ? 'border-indigo-500/40 bg-slate-700/50'
-          : 'border-transparent hover:bg-slate-800/60'
-      }`}
+      className="w-full rounded-2xl border px-4 py-3 text-left transition"
+      style={{
+        borderColor: active
+          ? 'rgba(34, 211, 238, 0.32)'
+          : 'rgba(103, 134, 154, 0.12)',
+        background: active
+          ? 'rgba(17, 44, 60, 0.88)'
+          : 'rgba(9, 21, 31, 0.78)',
+      }}
     >
       <div className="flex items-start gap-1.5">
-        {note.pinned && <Pin size={12} className="mt-0.5 shrink-0 text-amber-400" />}
-        <h3 className="truncate text-sm font-semibold text-slate-200">{note.title}</h3>
+        {note.pinned && <Pin size={12} className="mt-0.5 shrink-0 text-amber-300" />}
+        <h3 className="truncate text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+          {note.title}
+        </h3>
       </div>
 
-      <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+      <div
+        className="mt-1 flex items-center gap-2 text-[11px]"
+        style={{ color: 'var(--text-dim)' }}
+      >
         <Clock size={11} />
         <span>{timeAgo(note.updatedAt)}</span>
-        <span className="truncate text-slate-600">{note.notebookId}</span>
+        <span className="truncate" style={{ color: 'var(--text-3)' }}>
+          {note.notebookId}
+        </span>
       </div>
 
       {note.tags.length > 0 && (

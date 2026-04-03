@@ -1,137 +1,162 @@
-import type { RefObject } from 'react';
 import {
   Bold,
+  CheckSquare,
+  Eye,
+  EyeOff,
+  Image,
   Italic,
-  Strikethrough,
   Link,
   List,
   ListOrdered,
-  CheckSquare,
-  Quote,
-  Code,
-  Image,
   Minus,
-  Eye,
-  Edit3,
+  Quote,
+  Sigma,
+  Strikethrough,
+  Code2,
 } from 'lucide-react';
 import IconButton from '../ui/IconButton';
-import {
-  wrapSelection,
-  prefixLines,
-  numberedList,
-  taskList,
-  insertLink,
-  insertImage,
-  insertCodeBlock,
-  insertHorizontalRule,
-} from '../../lib/markdown-shortcuts';
+import type { EditorFontSize, LineWrapMode } from '../../types';
+import type { EditorCommand } from './MarkdownEditor';
 
 interface EditorToolbarProps {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  onContentChange: (value: string) => void;
-  isPreview: boolean;
+  isPreviewOpen: boolean;
+  fontSize: EditorFontSize;
+  lineWrap: LineWrapMode;
   onTogglePreview: () => void;
+  onCommand: (command: EditorCommand) => void;
+  onFontSizeChange: (value: EditorFontSize) => void;
+  onLineWrapChange: (value: LineWrapMode) => void;
 }
 
 export default function EditorToolbar({
-  textareaRef,
-  onContentChange,
-  isPreview,
+  isPreviewOpen,
+  fontSize,
+  lineWrap,
   onTogglePreview,
+  onCommand,
+  onFontSizeChange,
+  onLineWrapChange,
 }: EditorToolbarProps) {
-  const apply = (
-    fn: (el: HTMLTextAreaElement) => {
-      value: string;
-      selectionStart: number;
-      selectionEnd: number;
-    }
-  ) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const result = fn(el);
-    onContentChange(result.value);
-    // Restore selection after React re-renders the textarea
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(result.selectionStart, result.selectionEnd);
-    });
-  };
-
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-700/50 px-4 py-1.5">
+    <div
+      className="flex flex-wrap items-center gap-1 border-b px-4 py-2"
+      style={{ borderColor: 'var(--border-subtle)' }}
+    >
       <IconButton
         icon={Bold}
         title="Bold (Ctrl+B)"
-        onClick={() => apply((el) => wrapSelection(el, '**'))}
+        onClick={() => onCommand('bold')}
       />
       <IconButton
         icon={Italic}
         title="Italic (Ctrl+I)"
-        onClick={() => apply((el) => wrapSelection(el, '_'))}
+        onClick={() => onCommand('italic')}
       />
       <IconButton
         icon={Strikethrough}
         title="Strikethrough"
-        onClick={() => apply((el) => wrapSelection(el, '~~'))}
+        onClick={() => onCommand('strikethrough')}
       />
 
-      <div className="mx-1.5 h-4 w-px bg-slate-700" />
+      <div className="mx-2 h-5 w-px" style={{ background: 'var(--border-subtle)' }} />
 
       <IconButton
         icon={Link}
         title="Link (Ctrl+K)"
-        onClick={() => apply(insertLink)}
+        onClick={() => onCommand('link')}
       />
       <IconButton
         icon={Image}
         title="Image"
-        onClick={() => apply(insertImage)}
+        onClick={() => onCommand('image')}
       />
       <IconButton
-        icon={Code}
+        icon={Code2}
         title="Code block"
-        onClick={() => apply(insertCodeBlock)}
+        onClick={() => onCommand('code')}
+      />
+      <IconButton
+        icon={Sigma}
+        title="Inline math"
+        onClick={() => onCommand('inline-math')}
       />
 
-      <div className="mx-1.5 h-4 w-px bg-slate-700" />
+      <div className="mx-2 h-5 w-px" style={{ background: 'var(--border-subtle)' }} />
 
       <IconButton
         icon={List}
         title="Bullet list"
-        onClick={() => apply((el) => prefixLines(el, '- '))}
+        onClick={() => onCommand('bullet-list')}
       />
       <IconButton
         icon={ListOrdered}
         title="Numbered list"
-        onClick={() => apply(numberedList)}
+        onClick={() => onCommand('number-list')}
       />
       <IconButton
         icon={CheckSquare}
         title="Task list"
-        onClick={() => apply(taskList)}
+        onClick={() => onCommand('task-list')}
       />
-
-      <div className="mx-1.5 h-4 w-px bg-slate-700" />
-
       <IconButton
         icon={Quote}
         title="Blockquote"
-        onClick={() => apply((el) => prefixLines(el, '> '))}
+        onClick={() => onCommand('quote')}
       />
+
+      <button
+        type="button"
+        className="ghost-button px-2.5 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+        onClick={() => onCommand('callout')}
+      >
+        ! Note
+      </button>
+      <button
+        type="button"
+        className="ghost-button px-2.5 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+        onClick={() => onCommand('math-block')}
+      >
+        $$ Block
+      </button>
       <IconButton
         icon={Minus}
         title="Horizontal rule"
-        onClick={() => apply(insertHorizontalRule)}
+        onClick={() => onCommand('hr')}
       />
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Toggle preview / edit */}
+      <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
+        Font
+        <select
+          value={fontSize}
+          onChange={(event) => onFontSizeChange(event.target.value as EditorFontSize)}
+          className="rounded-lg border bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <option value="sm">Compact</option>
+          <option value="md">Balanced</option>
+          <option value="lg">Large</option>
+        </select>
+      </label>
+
+      <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
+        Wrap
+        <select
+          value={lineWrap}
+          onChange={(event) => onLineWrapChange(event.target.value as LineWrapMode)}
+          className="rounded-lg border bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <option value="wrap">Soft wrap</option>
+          <option value="scroll">Horizontal</option>
+        </select>
+      </label>
+
       <IconButton
-        icon={isPreview ? Edit3 : Eye}
-        title={isPreview ? 'Edit (Ctrl+E)' : 'Preview (Ctrl+E)'}
-        active={isPreview}
+        icon={isPreviewOpen ? EyeOff : Eye}
+        title={isPreviewOpen ? 'Hide preview (Ctrl+E)' : 'Show preview (Ctrl+E)'}
+        active={isPreviewOpen}
         onClick={onTogglePreview}
       />
     </div>

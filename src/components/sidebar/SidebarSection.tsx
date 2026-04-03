@@ -19,7 +19,8 @@ export default function SidebarSection({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:text-slate-400"
+        className="flex w-full items-center gap-1 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] transition-colors"
+        style={{ color: 'var(--text-dim)' }}
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         {title}
