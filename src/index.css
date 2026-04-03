@@ -207,6 +207,56 @@
     -webkit-app-region: no-drag;
   }
 
+  .window-chrome {
+    position: absolute;
+    inset: 0 16px auto;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: drag;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .window-chrome__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    border-radius: 999px;
+    padding: 0.55rem 0.9rem;
+    background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(14px);
+  }
+
+  .window-chrome__label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .window-chrome__dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    opacity: 0.8;
+  }
+
+  .window-chrome__title {
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+
   .workbench-shell::before {
     content: '';
     position: absolute;

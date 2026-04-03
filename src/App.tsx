@@ -84,8 +84,14 @@ function App() {
   }
 
   return (
-    <div className="workbench-shell p-4 pt-10">
-      <div className="window-drag-region absolute inset-x-0 top-0 h-8" />
+    <div className="workbench-shell p-4 pt-14">
+      <div className="window-chrome">
+        <div className="window-chrome__pill">
+          <span className="window-chrome__label">{profile.shortName}</span>
+          <span className="window-chrome__dot" />
+          <span className="window-chrome__title">Developer Workbench</span>
+        </div>
+      </div>
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[28px] border border-[var(--border-subtle)]">
         <Sidebar
           profileName={profile.shortName}
