@@ -198,17 +198,22 @@ test('renderer smoke covers notebook rename, note move, metadata edits, and them
     'data-theme',
     'workbench-light'
   );
-  await page.getByLabel('Layout').selectOption('writer');
+  await page.getByRole('button', { name: 'Cycle layout' }).click();
   await expect(
     page.getByText('Developer Workbench', { exact: true }).first()
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Backend Notes', exact: true })
   ).toBeHidden();
-  await page.getByLabel('Layout').selectOption('editor');
-  await expect(page.getByLabel('Layout')).toHaveValue('editor');
+  await page.getByRole('button', { name: 'Cycle layout' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Cycle layout' })
+  ).toContainText('Editor only');
   await expect(page.getByText('Notes', { exact: true })).toBeHidden();
-  await page.getByLabel('Layout').selectOption('workbench');
+  await page.getByRole('button', { name: 'Cycle layout' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Cycle layout' })
+  ).toContainText('Workbench');
 
   await page.reload();
 
@@ -216,7 +221,9 @@ test('renderer smoke covers notebook rename, note move, metadata edits, and them
     'data-theme',
     'workbench-light'
   );
-  await expect(page.getByLabel('Layout')).toHaveValue('workbench');
+  await expect(
+    page.getByRole('button', { name: 'Cycle layout' })
+  ).toContainText('Workbench');
   await expect(
     page.getByRole('button', { name: 'Backend Notes', exact: true })
   ).toBeVisible();

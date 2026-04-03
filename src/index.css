@@ -285,6 +285,48 @@
     color: var(--text-dim);
   }
 
+  .window-chrome__layout-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--field-bg);
+    color: var(--text-dim);
+    padding: 0.45rem 0.8rem;
+    outline: none;
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .window-chrome__layout-toggle:hover {
+    background: var(--ghost-hover-bg);
+    color: var(--text-1);
+  }
+
+  .window-chrome__layout-toggle:focus {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  }
+
+  .window-chrome__layout-toggle span {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .window-chrome__layout-toggle strong {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: normal;
+    color: var(--text-2);
+  }
+
   .window-chrome__theme-toggle {
     display: inline-flex;
     align-items: center;
@@ -314,24 +356,6 @@
   }
 
   .window-chrome__theme-toggle:focus {
-    border-color: var(--border-strong);
-    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
-  }
-
-  .window-chrome__control select {
-    border-radius: 999px;
-    border: 1px solid var(--border-subtle);
-    background: var(--field-bg);
-    color: var(--text-2);
-    padding: 0.38rem 0.75rem;
-    font-size: 0.76rem;
-    font-weight: 600;
-    letter-spacing: normal;
-    text-transform: none;
-    outline: none;
-  }
-
-  .window-chrome__control select:focus {
     border-color: var(--border-strong);
     box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
   }

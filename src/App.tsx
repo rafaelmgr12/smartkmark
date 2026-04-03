@@ -13,6 +13,8 @@ const LAYOUT_LABELS: Record<LayoutMode, string> = {
   editor: 'Editor only',
 };
 
+const LAYOUT_SEQUENCE: LayoutMode[] = ['workbench', 'writer', 'editor'];
+
 function App() {
   const {
     profile,
@@ -57,17 +59,56 @@ function App() {
     });
   }, [createNote, getTargetNotebook]);
 
+  const setLayoutMode = useCallback(
+    (layoutMode: LayoutMode) => {
+      void patchSettings({ layoutMode });
+    },
+    [patchSettings]
+  );
+
+  const cycleLayoutMode = useCallback(() => {
+    const currentIndex = LAYOUT_SEQUENCE.indexOf(settings.layoutMode);
+    const nextLayout =
+      LAYOUT_SEQUENCE[(currentIndex + 1) % LAYOUT_SEQUENCE.length];
+
+    setLayoutMode(nextLayout);
+  }, [setLayoutMode, settings.layoutMode]);
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (key === 'n') {
         event.preventDefault();
         void handleCreateNote();
+        return;
+      }
+
+      if (key === '1') {
+        event.preventDefault();
+        setLayoutMode('workbench');
+        return;
+      }
+
+      if (key === '2') {
+        event.preventDefault();
+        setLayoutMode('writer');
+        return;
+      }
+
+      if (key === '3') {
+        event.preventDefault();
+        setLayoutMode('editor');
       }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleCreateNote]);
+  }, [handleCreateNote, setLayoutMode]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
@@ -121,24 +162,16 @@ function App() {
               {isLightTheme ? <Moon size={15} /> : <Sun size={15} />}
             </button>
 
-            <label className="window-chrome__control">
+            <button
+              type="button"
+              aria-label="Cycle layout"
+              className="window-chrome__layout-toggle"
+              title={`Cycle layout (${LAYOUT_LABELS[settings.layoutMode]}). Shortcuts: Ctrl/Cmd+1, 2, 3`}
+              onClick={cycleLayoutMode}
+            >
               <span>Layout</span>
-              <select
-                aria-label="Layout"
-                value={settings.layoutMode}
-                onChange={(event) =>
-                  void patchSettings({
-                    layoutMode: event.target.value as LayoutMode,
-                  })
-                }
-              >
-                {Object.entries(LAYOUT_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <strong>{LAYOUT_LABELS[settings.layoutMode]}</strong>
+            </button>
           </div>
         </div>
       </div>
