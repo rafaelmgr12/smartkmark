@@ -9,6 +9,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    assetsInlineLimit: 0,
     chunkSizeWarningLimit: 650,
     rollupOptions: {
       output: {
