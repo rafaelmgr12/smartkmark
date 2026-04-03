@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('desktopApi', {
   moveNote: (noteId: string, fromNotebookId: string, toNotebookId: string) =>
     invoke('notes:move', noteId, fromNotebookId, toNotebookId),
 
+  getProfile: () => invoke('profile:get'),
   getSettings: () => invoke('settings:get'),
   updateSettings: (patch: Record<string, unknown>) =>
     invoke('settings:update', patch),

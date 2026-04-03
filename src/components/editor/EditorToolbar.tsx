@@ -13,32 +13,27 @@ import {
   Sigma,
   Strikethrough,
   Code2,
-  Palette,
 } from 'lucide-react';
 import IconButton from '../ui/IconButton';
-import type { EditorFontSize, LineWrapMode, ThemeName } from '../../types';
+import type { EditorFontSize, LineWrapMode } from '../../types';
 import type { EditorCommand } from './MarkdownEditor';
 
 interface EditorToolbarProps {
   isPreviewOpen: boolean;
-  theme: ThemeName;
   fontSize: EditorFontSize;
   lineWrap: LineWrapMode;
   onTogglePreview: () => void;
   onCommand: (command: EditorCommand) => void;
-  onThemeChange: (value: ThemeName) => void;
   onFontSizeChange: (value: EditorFontSize) => void;
   onLineWrapChange: (value: LineWrapMode) => void;
 }
 
 export default function EditorToolbar({
   isPreviewOpen,
-  theme,
   fontSize,
   lineWrap,
   onTogglePreview,
   onCommand,
-  onThemeChange,
   onFontSizeChange,
   onLineWrapChange,
 }: EditorToolbarProps) {
@@ -130,20 +125,6 @@ export default function EditorToolbar({
       />
 
       <div className="flex-1" />
-
-      <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
-        <Palette size={12} />
-        Theme
-        <select
-          value={theme}
-          onChange={(event) => onThemeChange(event.target.value as ThemeName)}
-          className="rounded-lg border bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <option value="workbench-dark">Dark</option>
-          <option value="workbench-light">Light</option>
-        </select>
-      </label>
 
       <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
         Font

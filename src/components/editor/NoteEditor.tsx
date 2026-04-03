@@ -347,7 +347,7 @@ export default function NoteEditor({
             Pick a note to start writing.
           </h2>
           <p className="mt-3 text-sm leading-7">
-            SmartKMark now treats the editor like a coding workspace: markdown,
+            This workspace now treats the editor like a coding workspace: markdown,
             formulas, code fences and preview are all ready on the right panel.
           </p>
         </div>
@@ -402,14 +402,12 @@ export default function NoteEditor({
 
       <EditorToolbar
         isPreviewOpen={settings.previewOpen}
-        theme={settings.theme}
         fontSize={settings.editorFontSize}
         lineWrap={settings.lineWrap}
         onCommand={applyCommand}
         onTogglePreview={() =>
           void onPatchSettings({ previewOpen: !settings.previewOpen })
         }
-        onThemeChange={(value) => void onPatchSettings({ theme: value })}
         onFontSizeChange={(value) =>
           void onPatchSettings({ editorFontSize: value })
         }

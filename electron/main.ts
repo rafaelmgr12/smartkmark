@@ -1,5 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { execFile } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import {
   createNotebook,
   createNote,
@@ -19,6 +22,51 @@ import {
 } from './storage';
 
 const isDev = !app.isPackaged;
+const execFileAsync = promisify(execFile);
+
+function normalizeProfileName(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized || null;
+}
+
+function getShortName(value: string | null | undefined): string {
+  const normalized = normalizeProfileName(value);
+  if (!normalized) {
+    return 'Workspace';
+  }
+
+  const firstName = normalized.split(' ')[0].toLowerCase();
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1);
+}
+
+async function getDesktopProfile() {
+  let fullName =
+    normalizeProfileName(process.env.FULLNAME) ??
+    normalizeProfileName(process.env.NAME);
+
+  if (!fullName && process.platform === 'darwin') {
+    try {
+      const { stdout } = await execFileAsync('id', ['-F']);
+      fullName = normalizeProfileName(stdout);
+    } catch {
+      fullName = null;
+    }
+  }
+
+  const fallbackName =
+    normalizeProfileName(process.env.USERNAME) ??
+    normalizeProfileName(process.env.USER) ??
+    normalizeProfileName(os.userInfo().username);
+
+  return {
+    fullName: fullName ?? fallbackName,
+    shortName: getShortName(fullName ?? fallbackName),
+  };
+}
 
 function dataDir(): string {
   return getBaseDir();
@@ -122,6 +170,7 @@ registerHandler(
     moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
 );
 
+registerHandler('profile:get', async () => getDesktopProfile());
 registerHandler('settings:get', async () => getSettings(dataDir()));
 registerHandler('settings:update', async (patch: Record<string, unknown>) =>
   updateSettings(

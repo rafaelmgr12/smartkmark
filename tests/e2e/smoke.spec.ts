@@ -138,6 +138,10 @@ test('renderer smoke covers notebook rename, note move, metadata edits, and them
           writeNotes(notes);
           return note;
         },
+        getProfile: async () => ({
+          fullName: 'Rafael Ribeiro',
+          shortName: 'rafael',
+        }),
         getSettings: async () => readSettings(),
         updateSettings: async (patch: Record<string, unknown>) => {
           const next = { ...readSettings(), ...patch };

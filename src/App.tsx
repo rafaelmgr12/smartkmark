@@ -7,6 +7,7 @@ const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
 
 function App() {
   const {
+    profile,
     notebooks,
     notes,
     filteredNotes,
@@ -72,7 +73,7 @@ function App() {
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-dim)]">
-            SmartKMark
+            {profile.shortName}
           </p>
           <p className="mt-2 text-lg font-semibold text-[var(--text-1)]">
             Loading your local workspace...
@@ -86,6 +87,8 @@ function App() {
     <div className="workbench-shell p-4">
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[28px] border border-[var(--border-subtle)]">
         <Sidebar
+          profileName={profile.shortName}
+          theme={settings.theme}
           notebooks={notebooks}
           activeItem={activeFilter}
           onItemClick={setFilter}
@@ -93,6 +96,7 @@ function App() {
           onCreateNotebook={createNotebook}
           onRenameNotebook={renameNotebook}
           onDeleteNotebook={deleteNotebook}
+          onThemeChange={(theme) => void patchSettings({ theme })}
         />
 
         <NoteList

@@ -12,9 +12,11 @@ import {
 import SidebarItem from './SidebarItem';
 import SidebarSection from './SidebarSection';
 import UserProfile from './UserProfile';
-import type { Notebook } from '../../types';
+import type { Notebook, ThemeName } from '../../types';
 
 interface SidebarProps {
+  profileName: string;
+  theme: ThemeName;
   notebooks: Notebook[];
   activeItem: string;
   onItemClick: (id: string) => void;
@@ -22,9 +24,12 @@ interface SidebarProps {
   onCreateNotebook: (name: string) => Promise<Notebook | null>;
   onRenameNotebook: (id: string, name: string) => Promise<Notebook | null>;
   onDeleteNotebook: (id: string) => Promise<void>;
+  onThemeChange: (theme: ThemeName) => void;
 }
 
 export default function Sidebar({
+  profileName,
+  theme,
   notebooks,
   activeItem,
   onItemClick,
@@ -32,6 +37,7 @@ export default function Sidebar({
   onCreateNotebook,
   onRenameNotebook,
   onDeleteNotebook,
+  onThemeChange,
 }: SidebarProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -76,7 +82,7 @@ export default function Sidebar({
     >
       <div className="px-4 pt-5 pb-4">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-dim)]">
-          SmartKMark
+          {profileName}
         </p>
         <h1 className="mt-2 text-xl font-semibold text-[var(--text-1)]">
           Developer Workbench
@@ -232,7 +238,12 @@ export default function Sidebar({
         </SidebarSection>
       </nav>
 
-      <UserProfile name="SmartKMark" syncedAt={new Date().toLocaleTimeString()} />
+      <UserProfile
+        name={profileName}
+        theme={theme}
+        syncedAt={new Date().toLocaleTimeString()}
+        onThemeChange={onThemeChange}
+      />
     </aside>
   );
 }

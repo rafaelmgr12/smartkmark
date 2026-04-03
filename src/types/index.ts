@@ -22,6 +22,11 @@ export interface AppSettings {
   previewOpen: boolean;
 }
 
+export interface DesktopProfile {
+  fullName: string | null;
+  shortName: string;
+}
+
 export type DesktopErrorCode =
   | 'VALIDATION_ERROR'
   | 'NOT_FOUND'
@@ -87,6 +92,7 @@ export interface DesktopApi {
     fromNotebookId: string,
     toNotebookId: string
   ) => Promise<Note>;
+  getProfile: () => Promise<DesktopProfile>;
   getSettings: () => Promise<AppSettings>;
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
 }

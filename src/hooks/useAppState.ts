@@ -3,6 +3,7 @@ import { getErrorMessage } from '../lib/desktop-errors';
 import type {
   AppSettings,
   CreateNotePayload,
+  DesktopProfile,
   Note,
   NoteMeta,
   Notebook,
@@ -10,6 +11,7 @@ import type {
 } from '../types';
 
 interface AppState {
+  profile: DesktopProfile;
   notebooks: Notebook[];
   notes: NoteMeta[];
   selectedNoteId: string | null;
@@ -27,6 +29,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   previewOpen: false,
 };
 
+const DEFAULT_PROFILE: DesktopProfile = {
+  fullName: null,
+  shortName: 'workspace',
+};
+
 function sortNotes(notes: NoteMeta[]): NoteMeta[] {
   return [...notes].sort(
     (left, right) =>
@@ -36,6 +43,7 @@ function sortNotes(notes: NoteMeta[]): NoteMeta[] {
 
 export default function useAppState() {
   const [state, setState] = useState<AppState>({
+    profile: DEFAULT_PROFILE,
     notebooks: [],
     notes: [],
     selectedNoteId: null,
@@ -48,7 +56,8 @@ export default function useAppState() {
 
   const refresh = useCallback(async () => {
     try {
-      const [notebooks, notes, settings] = await Promise.all([
+      const [profile, notebooks, notes, settings] = await Promise.all([
+        window.desktopApi.getProfile(),
         window.desktopApi.listNotebooks(),
         window.desktopApi.listNotes(),
         window.desktopApi.getSettings(),
@@ -56,6 +65,7 @@ export default function useAppState() {
 
       setState((prev) => ({
         ...prev,
+        profile,
         notebooks,
         notes: sortNotes(notes),
         settings,
