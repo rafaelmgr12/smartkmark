@@ -573,15 +573,33 @@
   font-family: var(--font-mono);
 }
 
-.cm-gutters {
-  background: var(--cm-gutter-bg);
+.cm-editor .cm-gutters {
+  background: var(--cm-gutter-bg) !important;
   border-right: 1px solid var(--cm-gutter-border);
-  color: var(--text-dim);
+  color: var(--cm-gutter-text);
 }
 
-.cm-activeLine,
-.cm-activeLineGutter {
-  background: var(--cm-active-line-bg);
+.cm-editor .cm-gutter {
+  background: transparent !important;
+}
+
+.cm-editor .cm-lineNumbers {
+  min-width: 2.6rem;
+}
+
+.cm-editor .cm-lineNumbers .cm-gutterElement {
+  min-width: 0;
+  padding: 0 0.55rem 0 0.3rem;
+  text-align: right;
+}
+
+.cm-editor .cm-gutterElement {
+  color: var(--cm-gutter-text);
+}
+
+.cm-editor .cm-activeLine,
+.cm-editor .cm-activeLineGutter {
+  background: var(--cm-active-line-bg) !important;
 }
 
 .cm-selectionBackground,
@@ -594,7 +612,7 @@
 }
 
 .cm-line {
-  padding: 0 0.25rem;
+  padding: 0 0.35rem;
 }
 
 .hljs-comment,
