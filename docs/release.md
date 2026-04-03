@@ -8,6 +8,16 @@ npm run build
 npm run dist
 ```
 
+## Security Checklist (Release Gate)
+
+Before generating release artifacts, confirm all items below:
+
+- [ ] **Renderer isolation:** `BrowserWindow.webPreferences` keeps `sandbox: true`, `contextIsolation: true`, and `nodeIntegration: false`.
+- [ ] **CSP in place:** `index.html` defines a Content Security Policy and keeps `script-src`, `style-src`, and `connect-src` limited to app/runtime needs (including localhost dev endpoints only when required).
+- [ ] **IPC payload validation:** every `ipcMain.handle` channel validates inputs with schema checks (for example, `zod`) before calling `storage` functions.
+- [ ] **Permission review:** no new Electron permissions were introduced without security review (window options, protocol access, shell/child process usage, filesystem scope).
+- [ ] **Dependency review:** newly added dependencies are pinned in lockfile and reviewed for security advisories.
+
 ## Signing and Notarization
 
 ### macOS

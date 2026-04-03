@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  AppError,
   createNotebook,
   createNote,
   deleteNotebook,
@@ -19,10 +20,141 @@ import {
   serializeAppError,
   updateNote,
   updateSettings,
+  type AppSettings,
+  type NoteStatus,
+  type NoteTag,
 } from './storage';
 
 const isDev = !app.isPackaged;
 const execFileAsync = promisify(execFile);
+
+type Schema<T> = {
+  parse: (input: unknown) => T;
+};
+
+function schemaError(message: string): never {
+  throw new AppError('VALIDATION_ERROR', message);
+}
+
+const nonEmptyStringSchema: Schema<string> = {
+  parse(input) {
+    if (typeof input !== 'string' || input.trim().length === 0) {
+      schemaError('Expected a non-empty string.');
+    }
+
+    return input;
+  },
+};
+
+const noteStatusSchema: Schema<NoteStatus> = {
+  parse(input) {
+    if (
+      input !== 'active' &&
+      input !== 'onHold' &&
+      input !== 'completed' &&
+      input !== 'dropped'
+    ) {
+      schemaError('Invalid note status.');
+    }
+
+    return input;
+  },
+};
+
+const noteTagSchema: Schema<NoteTag> = {
+  parse(input) {
+    if (!input || typeof input !== 'object') {
+      schemaError('Expected a note tag object.');
+    }
+
+    const value = input as Record<string, unknown>;
+    const keys = Object.keys(value);
+
+    if (keys.some((key) => key !== 'label' && key !== 'color')) {
+      schemaError('Unexpected fields in note tag payload.');
+    }
+
+    return {
+      label: typeof value.label === 'string' ? value.label : schemaError('Expected tag label string.'),
+      color: typeof value.color === 'string' ? value.color : schemaError('Expected tag color string.'),
+    };
+  },
+};
+
+const settingsPatchSchema: Schema<Partial<AppSettings>> = {
+  parse(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      schemaError('Expected settings patch object.');
+    }
+
+    const value = input as Record<string, unknown>;
+    const allowedKeys: (keyof AppSettings)[] = [
+      'theme',
+      'layoutMode',
+      'editorFontSize',
+      'lineWrap',
+      'previewOpen',
+    ];
+
+    for (const key of Object.keys(value)) {
+      if (!allowedKeys.includes(key as keyof AppSettings)) {
+        schemaError(`Unexpected settings field: ${key}.`);
+      }
+    }
+
+    if (
+      value.theme !== undefined &&
+      value.theme !== 'workbench-dark' &&
+      value.theme !== 'workbench-light'
+    ) {
+      schemaError('Invalid settings.theme value.');
+    }
+
+    if (
+      value.layoutMode !== undefined &&
+      value.layoutMode !== 'workbench' &&
+      value.layoutMode !== 'writer' &&
+      value.layoutMode !== 'editor'
+    ) {
+      schemaError('Invalid settings.layoutMode value.');
+    }
+
+    if (
+      value.editorFontSize !== undefined &&
+      value.editorFontSize !== 'sm' &&
+      value.editorFontSize !== 'md' &&
+      value.editorFontSize !== 'lg'
+    ) {
+      schemaError('Invalid settings.editorFontSize value.');
+    }
+
+    if (
+      value.lineWrap !== undefined &&
+      value.lineWrap !== 'wrap' &&
+      value.lineWrap !== 'scroll'
+    ) {
+      schemaError('Invalid settings.lineWrap value.');
+    }
+
+    if (value.previewOpen !== undefined && typeof value.previewOpen !== 'boolean') {
+      schemaError('Invalid settings.previewOpen value.');
+    }
+
+    return value as Partial<AppSettings>;
+  },
+};
+
+function tupleSchema<T extends unknown[]>(...schemas: { [K in keyof T]: Schema<T[K]> }): Schema<T> {
+  return {
+    parse(input) {
+      if (!Array.isArray(input) || input.length !== schemas.length) {
+        schemaError(`Expected ${schemas.length} argument(s).`);
+      }
+
+      return schemas.map((schema, index) => schema.parse(input[index])) as T;
+    },
+  };
+}
 
 function normalizeProfileName(value: string | null | undefined): string | null {
   if (!value) {
@@ -72,18 +204,124 @@ function dataDir(): string {
   return getBaseDir();
 }
 
-function registerHandler<Args extends unknown[], Result>(
+function registerValidatedHandler<Payload>(
   channel: string,
-  handler: (...args: Args) => Promise<Result>
+  schema: Schema<Payload>,
+  handler: (payload: Payload) => Promise<unknown>
 ) {
-  ipcMain.handle(channel, async (_event, ...args: Args) => {
+  ipcMain.handle(channel, async (_event, ...rawArgs: unknown[]) => {
     try {
-      return await handler(...args);
+      const payload = schema.parse(rawArgs);
+      return await handler(payload);
     } catch (error) {
       throw new Error(serializeAppError(error));
     }
   });
 }
+
+const notesCreateSchema: Schema<{
+  notebookId: string;
+  title: string;
+  body?: string;
+}> = {
+  parse(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      schemaError('Expected notes:create payload object.');
+    }
+
+    const value = input as Record<string, unknown>;
+    const keys = Object.keys(value);
+
+    if (keys.some((key) => key !== 'notebookId' && key !== 'title' && key !== 'body')) {
+      schemaError('Unexpected fields in notes:create payload.');
+    }
+
+    if (typeof value.notebookId !== 'string' || value.notebookId.trim().length === 0) {
+      schemaError('notes:create notebookId must be a non-empty string.');
+    }
+
+    if (typeof value.title !== 'string' || value.title.trim().length === 0) {
+      schemaError('notes:create title must be a non-empty string.');
+    }
+
+    if (value.body !== undefined && typeof value.body !== 'string') {
+      schemaError('notes:create body must be a string when provided.');
+    }
+
+    return {
+      notebookId: value.notebookId,
+      title: value.title,
+      ...(value.body !== undefined ? { body: value.body } : {}),
+    };
+  },
+};
+
+const notesUpdateSchema: Schema<{
+  id: string;
+  notebookId: string;
+  title?: string;
+  body?: string;
+  tags?: NoteTag[];
+  pinned?: boolean;
+  status?: NoteStatus;
+}> = {
+  parse(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      schemaError('Expected notes:update payload object.');
+    }
+
+    const value = input as Record<string, unknown>;
+    const allowed = ['id', 'notebookId', 'title', 'body', 'tags', 'pinned', 'status'];
+
+    for (const key of Object.keys(value)) {
+      if (!allowed.includes(key)) {
+        schemaError(`Unexpected fields in notes:update payload: ${key}.`);
+      }
+    }
+
+    if (typeof value.id !== 'string' || value.id.trim().length === 0) {
+      schemaError('notes:update id must be a non-empty string.');
+    }
+
+    if (typeof value.notebookId !== 'string' || value.notebookId.trim().length === 0) {
+      schemaError('notes:update notebookId must be a non-empty string.');
+    }
+
+    if (value.title !== undefined && typeof value.title !== 'string') {
+      schemaError('notes:update title must be a string when provided.');
+    }
+
+    if (value.body !== undefined && typeof value.body !== 'string') {
+      schemaError('notes:update body must be a string when provided.');
+    }
+
+    if (value.pinned !== undefined && typeof value.pinned !== 'boolean') {
+      schemaError('notes:update pinned must be a boolean when provided.');
+    }
+
+    if (value.status !== undefined) {
+      noteStatusSchema.parse(value.status);
+    }
+
+    if (value.tags !== undefined) {
+      if (!Array.isArray(value.tags)) {
+        schemaError('notes:update tags must be an array when provided.');
+      }
+
+      value.tags.forEach((tag) => noteTagSchema.parse(tag));
+    }
+
+    return {
+      id: value.id,
+      notebookId: value.notebookId,
+      ...(value.title !== undefined ? { title: value.title } : {}),
+      ...(value.body !== undefined ? { body: value.body } : {}),
+      ...(value.tags !== undefined ? { tags: value.tags as NoteTag[] } : {}),
+      ...(value.pinned !== undefined ? { pinned: value.pinned } : {}),
+      ...(value.status !== undefined ? { status: value.status as NoteStatus } : {}),
+    };
+  },
+};
 
 async function createWindow(): Promise<void> {
   const window = new BrowserWindow({
@@ -97,7 +335,7 @@ async function createWindow(): Promise<void> {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -127,54 +365,45 @@ app.on('window-all-closed', () => {
   }
 });
 
-registerHandler('notebooks:list', async () => listNotebooks(dataDir()));
-registerHandler('notebooks:create', async (name: string) =>
+registerValidatedHandler('notebooks:list', tupleSchema(), async () => listNotebooks(dataDir()));
+registerValidatedHandler('notebooks:create', tupleSchema(nonEmptyStringSchema), async ([name]) =>
   createNotebook(dataDir(), name)
 );
-registerHandler('notebooks:rename', async (id: string, newName: string) =>
-  renameNotebook(dataDir(), id, newName)
+registerValidatedHandler(
+  'notebooks:rename',
+  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+  async ([id, newName]) => renameNotebook(dataDir(), id, newName)
 );
-registerHandler('notebooks:delete', async (id: string) =>
+registerValidatedHandler('notebooks:delete', tupleSchema(nonEmptyStringSchema), async ([id]) =>
   deleteNotebook(dataDir(), id)
 );
 
-registerHandler('notes:list', async () => listAllNotes(dataDir()));
-registerHandler('notes:get', async (notebookId: string, noteId: string) =>
-  getNote(dataDir(), notebookId, noteId)
+registerValidatedHandler('notes:list', tupleSchema(), async () => listAllNotes(dataDir()));
+registerValidatedHandler(
+  'notes:get',
+  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+  async ([notebookId, noteId]) => getNote(dataDir(), notebookId, noteId)
 );
-registerHandler(
-  'notes:create',
-  async (payload: { notebookId: string; title: string; body?: string }) =>
-    createNote(dataDir(), payload)
+registerValidatedHandler('notes:create', tupleSchema(notesCreateSchema), async ([payload]) =>
+  createNote(dataDir(), payload)
 );
-registerHandler(
-  'notes:update',
-  async (payload: {
-    id: string;
-    notebookId: string;
-    title?: string;
-    body?: string;
-    tags?: { label: string; color: string }[];
-    pinned?: boolean;
-    status?: 'active' | 'onHold' | 'completed' | 'dropped';
-  }) => updateNote(dataDir(), payload)
+registerValidatedHandler('notes:update', tupleSchema(notesUpdateSchema), async ([payload]) =>
+  updateNote(dataDir(), payload)
 );
-registerHandler(
+registerValidatedHandler(
   'notes:delete',
-  async (notebookId: string, noteId: string) =>
-    deleteNote(dataDir(), notebookId, noteId)
+  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+  async ([notebookId, noteId]) => deleteNote(dataDir(), notebookId, noteId)
 );
-registerHandler(
+registerValidatedHandler(
   'notes:move',
-  async (noteId: string, fromNotebookId: string, toNotebookId: string) =>
+  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema, nonEmptyStringSchema),
+  async ([noteId, fromNotebookId, toNotebookId]) =>
     moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
 );
 
-registerHandler('profile:get', async () => getDesktopProfile());
-registerHandler('settings:get', async () => getSettings(dataDir()));
-registerHandler('settings:update', async (patch: Record<string, unknown>) =>
-  updateSettings(
-    dataDir(),
-    patch as Parameters<typeof updateSettings>[1]
-  )
+registerValidatedHandler('profile:get', tupleSchema(), async () => getDesktopProfile());
+registerValidatedHandler('settings:get', tupleSchema(), async () => getSettings(dataDir()));
+registerValidatedHandler('settings:update', tupleSchema(settingsPatchSchema), async ([patch]) =>
+  updateSettings(dataDir(), patch)
 );
