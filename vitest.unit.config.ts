@@ -5,7 +5,11 @@ export default mergeConfig(
   baseConfig,
   defineConfig({
     test: {
-      include: ['src/**/*.unit.test.{ts,tsx}', 'electron/**/*.unit.test.ts'],
+      include: [
+        'src/**/*.unit.test.{ts,tsx}',
+        'electron/**/*.unit.test.ts',
+        'electron/**/*.test.ts',
+      ],
     },
   })
 );

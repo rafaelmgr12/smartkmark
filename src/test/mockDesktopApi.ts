@@ -168,6 +168,21 @@ export function createDesktopApiMock(
     return clone(state.settings);
   });
 
+  const exportBackup = vi.fn<DesktopApi['exportBackup']>(async () => ({
+    canceled: false,
+    filePath: '/tmp/smartkmark-export.zip',
+  }));
+
+  const importBackup = vi.fn<DesktopApi['importBackup']>(async () => ({
+    canceled: false,
+  }));
+
+  const createIncrementalBackup = vi.fn<DesktopApi['createIncrementalBackup']>(
+    async () => ({
+      filePath: '/tmp/smartkmark-backup-20260101-000000.zip',
+    })
+  );
+
   const mocks = {
     listNotebooks,
     createNotebook,
@@ -182,6 +197,9 @@ export function createDesktopApiMock(
     getProfile,
     getSettings,
     updateSettings,
+    exportBackup,
+    importBackup,
+    createIncrementalBackup,
   };
 
   return {
