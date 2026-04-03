@@ -17,6 +17,7 @@ Desktop markdown workspace for developers, built with **Electron**, **React**, *
 - Split preview with heading outline, copy-code actions, and syntax-highlighted fences
 - Markdown support for GFM, footnotes, callouts, heading anchors, and math formulas via KaTeX
 - Local app settings for preview visibility, editor font size, and wrap mode
+- Dual theme support with persisted dark and light workbench variants
 - Hardened filesystem layer with notebook validation, stable note filenames, and typed desktop errors
 - Quality scripts for `typecheck`, `lint`, `test`, and `test:e2e`
 
@@ -28,6 +29,7 @@ Desktop markdown workspace for developers, built with **Electron**, **React**, *
 - **Local-first persistence**: notes are saved to the filesystem with YAML frontmatter
 - **Notebook CRUD**: create, rename, and delete notebooks from the sidebar
 - **Note CRUD**: create, edit, delete, pin, and move notes
+- **Notebook management**: create, rename, and delete notebooks from the workspace UI
 - **CodeMirror 6 editor**: technical editing experience with better keyboard handling and markdown tooling
 - **Live split preview**: toggle preview visibility and keep the setting persisted locally
 - **Autosave**: notes are saved automatically after inactivity, with explicit save status feedback
@@ -36,7 +38,8 @@ Desktop markdown workspace for developers, built with **Electron**, **React**, *
 - **Heading outline**: sidebar outline for long technical notes
 - **Search and filtering**: filter notes by title and notebook
 - **Pinned notes**: keep important notes at the top
-- **Local preferences**: preview state, editor font size, and line wrap mode
+- **Metadata editing**: move notes between notebooks, update note status, and manage tags inline
+- **Local preferences**: theme, preview state, editor font size, and line wrap mode
 - **Cross-platform packaging**: Linux, Windows, and macOS targets via `electron-builder`
 
 ---
@@ -174,7 +177,7 @@ npx playwright install chromium
 | `npm run typecheck` | Run TypeScript checks for renderer and Electron |
 | `npm run lint` | Run ESLint |
 | `npm run test` | Run Vitest suites |
-| `npm run test:e2e` | Run the Playwright smoke test against the production renderer build |
+| `npm run test:e2e` | Run the Playwright renderer smoke test against the production build |
 
 ### Development
 
@@ -304,6 +307,7 @@ Current automated coverage includes:
 - Stable filenames are generated with a title slug plus a note-id suffix to avoid collisions.
 - The Electron persistence layer skips corrupt markdown files instead of crashing the app.
 - The current e2e smoke test validates the production renderer build with a desktop API mock because Playwright's Electron launcher is not compatible with the Electron version used in this project.
+- Release prerequisites and signing/notarization variables are documented in [docs/release.md](docs/release.md).
 
 ---
 
