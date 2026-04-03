@@ -19,7 +19,7 @@ Desktop markdown workspace for developers, built with **Electron**, **React**, *
 - Local app settings for preview visibility, editor font size, and wrap mode
 - Dual theme support with persisted dark and light workbench variants
 - Hardened filesystem layer with notebook validation, stable note filenames, and typed desktop errors
-- Quality scripts for `typecheck`, `lint`, `test`, and `test:e2e`
+- Quality scripts for `typecheck`, `lint`, `test:unit`, `test:integration`, and `test:e2e`
 
 ---
 
@@ -87,6 +87,9 @@ smartkmark/
 │   ├── data/
 │   │   └── mock.ts
 │   ├── test/
+│   │   ├── factories.ts
+│   │   ├── helpers.ts
+│   │   ├── mockDesktopApi.ts
 │   │   └── setup.ts
 │   ├── types/
 │   │   └── index.ts
@@ -95,9 +98,13 @@ smartkmark/
 │   └── main.tsx
 ├── tests/
 │   └── e2e/
-│       └── smoke.spec.ts
+│       ├── desktopApi.fixture.ts
+│       └── workbench.spec.ts
 ├── playwright.config.ts
 ├── vite.config.ts
+├── vitest.base.config.ts
+├── vitest.unit.config.ts
+├── vitest.integration.config.ts
 ├── tailwind.config.js
 ├── package.json
 └── README.md
@@ -176,8 +183,10 @@ npx playwright install chromium
 | `npm run dist` | Package release artifacts with `electron-builder` |
 | `npm run typecheck` | Run TypeScript checks for renderer and Electron |
 | `npm run lint` | Run ESLint |
-| `npm run test` | Run Vitest suites |
-| `npm run test:e2e` | Run the Playwright renderer smoke test against the production build |
+| `npm run test` | Run unit and integration suites |
+| `npm run test:unit` | Run pure unit tests for utilities and storage |
+| `npm run test:integration` | Run hook and component integration tests with mocked `desktopApi` |
+| `npm run test:e2e` | Run Playwright renderer e2e tests against the production build |
 
 ### Development
 
@@ -293,10 +302,10 @@ The current preview supports:
 
 Current automated coverage includes:
 
-- markdown shortcut unit tests
-- storage and persistence unit tests
-- preview rendering component tests
-- Playwright smoke test for create, save, and reopen flows against the production renderer build
+- unit tests for markdown shortcuts, quick open ranking, desktop error mapping, and filesystem storage
+- integration tests for `useAppState`, `App`, preview rendering, and `NoteEditor` save/move/tag flows
+- shared typed factories and `desktopApi` mocks for Vitest and Playwright scenarios
+- Playwright renderer e2e coverage for seeded workspaces, notebook lifecycle, quick open, metadata flows, destructive actions, and persisted preferences
 
 ---
 

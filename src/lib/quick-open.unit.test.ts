@@ -40,4 +40,48 @@ describe('searchQuickOpenResults', () => {
     const results = searchQuickOpenResults(NOTES, 'release');
     expect(results[0]?.matchedTags.map((tag) => tag.label)).toEqual(['release']);
   });
+
+  it('ranks exact title matches ahead of notebook matches', () => {
+    const results = searchQuickOpenResults(
+      [
+        ...NOTES,
+        {
+          id: '3',
+          title: 'Backend Overview',
+          notebookId: 'API',
+          tags: [],
+          pinned: false,
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-04T00:00:00.000Z',
+        },
+      ],
+      'api'
+    );
+
+    expect(results.map((result) => result.note.id)).toEqual(['1', '3']);
+  });
+
+  it('limits the result size', () => {
+    const results = searchQuickOpenResults(
+      [
+        ...NOTES,
+        {
+          id: '3',
+          title: 'API',
+          notebookId: 'Backend',
+          tags: [],
+          pinned: false,
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-04T00:00:00.000Z',
+        },
+      ],
+      'api',
+      1
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.note.id).toBe('1');
+  });
 });
