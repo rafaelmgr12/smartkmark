@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import {
   Check,
+  Download,
   FileText,
+  HardDriveDownload,
+  HardDriveUpload,
   Pin,
   Pencil,
   FolderOpen,
@@ -23,6 +26,9 @@ interface SidebarProps {
   onCreateNotebook: (name: string) => Promise<Notebook | null>;
   onRenameNotebook: (id: string, name: string) => Promise<Notebook | null>;
   onDeleteNotebook: (id: string) => Promise<void>;
+  onExportBackup: () => Promise<void>;
+  onImportBackup: () => Promise<void>;
+  onCreateIncrementalBackup: () => Promise<void>;
 }
 
 export default function Sidebar({
@@ -34,6 +40,9 @@ export default function Sidebar({
   onCreateNotebook,
   onRenameNotebook,
   onDeleteNotebook,
+  onExportBackup,
+  onImportBackup,
+  onCreateIncrementalBackup,
 }: SidebarProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -233,6 +242,35 @@ export default function Sidebar({
           )}
         </SidebarSection>
       </nav>
+
+      <div className="border-t px-3 py-3" style={{ borderColor: 'var(--border-subtle)' }}>
+        <SidebarSection title="Data & Backup">
+          <button
+            type="button"
+            className="ghost-button w-full justify-start px-3 py-2 text-xs"
+            onClick={() => void onExportBackup()}
+          >
+            <Download size={14} />
+            Exportar
+          </button>
+          <button
+            type="button"
+            className="ghost-button w-full justify-start px-3 py-2 text-xs"
+            onClick={() => void onImportBackup()}
+          >
+            <HardDriveUpload size={14} />
+            Importar
+          </button>
+          <button
+            type="button"
+            className="ghost-button w-full justify-start px-3 py-2 text-xs"
+            onClick={() => void onCreateIncrementalBackup()}
+          >
+            <HardDriveDownload size={14} />
+            Criar backup agora
+          </button>
+        </SidebarSection>
+      </div>
 
       <UserProfile name={profileName} syncedAt={new Date().toLocaleTimeString()} />
     </aside>

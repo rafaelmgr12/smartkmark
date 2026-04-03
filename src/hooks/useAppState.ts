@@ -369,6 +369,51 @@ export default function useAppState() {
     }
   }, []);
 
+  const exportBackup = useCallback(async () => {
+    try {
+      const result = await window.desktopApi.exportBackup();
+      setState((prev) => ({ ...prev, error: null }));
+      return result;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to export workspace backup.'),
+      }));
+      return null;
+    }
+  }, []);
+
+  const importBackup = useCallback(async () => {
+    try {
+      const result = await window.desktopApi.importBackup();
+      if (!result.canceled) {
+        await refresh();
+      }
+      setState((prev) => ({ ...prev, error: null }));
+      return result;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to import workspace backup.'),
+      }));
+      return null;
+    }
+  }, [refresh]);
+
+  const createIncrementalBackup = useCallback(async () => {
+    try {
+      const result = await window.desktopApi.createIncrementalBackup();
+      setState((prev) => ({ ...prev, error: null }));
+      return result;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to create incremental backup.'),
+      }));
+      return null;
+    }
+  }, []);
+
   const filteredNotes = useMemo(() => {
     if (state.activeFilter === 'all') {
       return state.notes;
@@ -413,5 +458,8 @@ export default function useAppState() {
     moveNote,
     togglePin,
     patchSettings,
+    exportBackup,
+    importBackup,
+    createIncrementalBackup,
   };
 }

@@ -58,4 +58,7 @@ contextBridge.exposeInMainWorld('desktopApi', {
   getSettings: () => invoke('settings:get'),
   updateSettings: (patch: Record<string, unknown>) =>
     invoke('settings:update', patch),
+  exportBackup: () => invoke('backup:export'),
+  importBackup: () => invoke('backup:import'),
+  createIncrementalBackup: () => invoke('backup:createIncremental'),
 });

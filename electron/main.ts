@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,13 +6,16 @@ import { promisify } from 'node:util';
 import {
   AppError,
   createNotebook,
+  createIncrementalBackup,
   createNote,
   deleteNotebook,
   deleteNote,
   ensureBaseDir,
+  exportWorkspaceBackup,
   getBaseDir,
   getNote,
   getSettings,
+  importWorkspaceBackup,
   listAllNotes,
   listNotebooks,
   moveNote,
@@ -409,3 +412,37 @@ registerValidatedHandler('settings:get', tupleSchema(), async () => getSettings(
 registerValidatedHandler('settings:update', tupleSchema(settingsPatchSchema), async ([patch]) =>
   updateSettings(dataDir(), patch)
 );
+registerHandler('backup:export', async () => {
+  const result = await dialog.showSaveDialog({
+    title: 'Export SmartKMark workspace backup',
+    defaultPath: `smartkmark-workspace-${new Date().toISOString().slice(0, 10)}.zip`,
+    filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  const exportedPath = await exportWorkspaceBackup(dataDir(), result.filePath);
+  return { canceled: false, filePath: exportedPath };
+});
+
+registerHandler('backup:import', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Import SmartKMark workspace backup',
+    properties: ['openFile'],
+    filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true };
+  }
+
+  await importWorkspaceBackup(dataDir(), result.filePaths[0]);
+  return { canceled: false };
+});
+
+registerHandler('backup:createIncremental', async () => {
+  const backupPath = await createIncrementalBackup(dataDir());
+  return { filePath: backupPath };
+});

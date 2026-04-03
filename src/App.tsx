@@ -41,6 +41,9 @@ function App() {
     moveNote,
     togglePin,
     patchSettings,
+    exportBackup,
+    importBackup,
+    createIncrementalBackup,
   } = useAppState();
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -150,6 +153,27 @@ function App() {
     settings.layoutMode === 'workbench' || settings.layoutMode === 'writer';
   const isLightTheme = settings.theme === 'workbench-light';
 
+  const handleExportBackup = useCallback(async () => {
+    const result = await exportBackup();
+    if (result && !result.canceled && result.filePath) {
+      window.alert(`Backup exportado para:\n${result.filePath}`);
+    }
+  }, [exportBackup]);
+
+  const handleImportBackup = useCallback(async () => {
+    const result = await importBackup();
+    if (result && !result.canceled) {
+      window.alert('Backup importado com sucesso.');
+    }
+  }, [importBackup]);
+
+  const handleIncrementalBackup = useCallback(async () => {
+    const result = await createIncrementalBackup();
+    if (result?.filePath) {
+      window.alert(`Backup incremental criado em:\n${result.filePath}`);
+    }
+  }, [createIncrementalBackup]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -226,6 +250,9 @@ function App() {
             onCreateNotebook={createNotebook}
             onRenameNotebook={renameNotebook}
             onDeleteNotebook={deleteNotebook}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
+            onCreateIncrementalBackup={handleIncrementalBackup}
           />
         ) : null}
 

@@ -29,6 +29,11 @@ export interface DesktopProfile {
   shortName: string;
 }
 
+export interface BackupActionResult {
+  canceled: boolean;
+  filePath?: string;
+}
+
 export type DesktopErrorCode =
   | 'VALIDATION_ERROR'
   | 'NOT_FOUND'
@@ -97,6 +102,9 @@ export interface DesktopApi {
   getProfile: () => Promise<DesktopProfile>;
   getSettings: () => Promise<AppSettings>;
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
+  exportBackup: () => Promise<BackupActionResult>;
+  importBackup: () => Promise<BackupActionResult>;
+  createIncrementalBackup: () => Promise<{ filePath: string }>;
 }
 
 declare global {
