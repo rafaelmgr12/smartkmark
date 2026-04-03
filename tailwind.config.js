@@ -5,13 +5,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'Arial', 'Helvetica', 'sans-serif'],
-        mono: ["'Fira Code'", 'Consolas', 'monospace'],
-      },
-      colors: {
-        slate: {
-          850: '#151b2b',
-        },
+        sans: ['IBM Plex Sans', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
     },
   },
