@@ -15,6 +15,7 @@ import {
   listAllNotes,
   listNotebooks,
   moveNote,
+  rebuildNoteIndex,
   renameNotebook,
   serializeAppError,
   updateNote,
@@ -169,6 +170,7 @@ registerHandler(
   async (noteId: string, fromNotebookId: string, toNotebookId: string) =>
     moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
 );
+registerHandler('notes:rebuild-index', async () => rebuildNoteIndex(dataDir()));
 
 registerHandler('profile:get', async () => getDesktopProfile());
 registerHandler('settings:get', async () => getSettings(dataDir()));

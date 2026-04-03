@@ -63,7 +63,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const SETTINGS_FILE = 'settings.json';
+const NOTE_INDEX_FILE = '.index.json';
 const NOTEBOOK_NAME_PATTERN = /[<>:"/\\|?*]/g;
+
+interface NoteIndexEntry {
+  notebookId: string;
+  filename: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type NoteIndex = Record<string, NoteIndexEntry>;
 
 export class AppError extends Error {
   code: DesktopErrorCode;
@@ -257,6 +268,58 @@ async function ensureNotebookExists(
   }
 }
 
+function noteIndexPath(baseDir: string): string {
+  return path.join(baseDir, NOTE_INDEX_FILE);
+}
+
+async function readNoteIndex(baseDir: string): Promise<NoteIndex | null> {
+  try {
+    const raw = await fs.readFile(noteIndexPath(baseDir), 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const index: NoteIndex = {};
+    for (const [noteId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== 'object') {
+        return null;
+      }
+
+      const candidate = value as Record<string, unknown>;
+      if (
+        typeof candidate.notebookId !== 'string' ||
+        typeof candidate.filename !== 'string' ||
+        typeof candidate.title !== 'string' ||
+        typeof candidate.createdAt !== 'string' ||
+        typeof candidate.updatedAt !== 'string'
+      ) {
+        return null;
+      }
+
+      index[noteId] = {
+        notebookId: candidate.notebookId,
+        filename: candidate.filename,
+        title: candidate.title,
+        createdAt: candidate.createdAt,
+        updatedAt: candidate.updatedAt,
+      };
+    }
+
+    return index;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+
+    return null;
+  }
+}
+
+async function writeNoteIndex(baseDir: string, index: NoteIndex): Promise<void> {
+  await fs.writeFile(noteIndexPath(baseDir), JSON.stringify(index, null, 2), 'utf-8');
+}
+
 export async function listNotebooks(baseDir: string): Promise<Notebook[]> {
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
@@ -314,6 +377,13 @@ export async function renameNotebook(
 
   try {
     await fs.rename(currentPath, nextPath);
+    const index = await ensureNoteIndex(baseDir);
+    for (const entry of Object.values(index)) {
+      if (entry.notebookId === id) {
+        entry.notebookId = nextName;
+      }
+    }
+    await writeNoteIndex(baseDir, index);
     return { id: nextName, name: nextName };
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to rename notebook.', {
@@ -435,46 +505,26 @@ async function readNoteFile(filePath: string, notebookId: string): Promise<Note>
   }
 }
 
-export async function findNoteFile(
-  baseDir: string,
-  notebookId: string,
-  noteId: string
-): Promise<string | null> {
-  const notebookPath = path.join(baseDir, notebookId);
-
-  let files: string[];
-  try {
-    files = await fs.readdir(notebookPath);
-  } catch {
-    return null;
-  }
-
-  for (const file of files) {
-    if (!file.endsWith('.md')) {
-      continue;
-    }
-
-    try {
-      const note = await readNoteFile(path.join(notebookPath, file), notebookId);
-      if (note.id === noteId) {
-        return file;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
+function noteToMeta(note: Note): NoteMeta {
+  return {
+    id: note.id,
+    title: note.title,
+    notebookId: note.notebookId,
+    tags: note.tags,
+    pinned: note.pinned,
+    status: note.status,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+  };
 }
 
-export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
+export async function rebuildNoteIndex(baseDir: string): Promise<NoteIndex> {
   const notebooks = await listNotebooks(baseDir);
-  const notes: NoteMeta[] = [];
+  const index: NoteIndex = {};
 
   for (const notebook of notebooks) {
     const notebookPath = path.join(baseDir, notebook.id);
     let files: string[] = [];
-
     try {
       files = await fs.readdir(notebookPath);
     } catch {
@@ -488,21 +538,112 @@ export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
 
       try {
         const note = await readNoteFile(path.join(notebookPath, file), notebook.id);
-        notes.push({
-          id: note.id,
+        index[note.id] = {
+          notebookId: notebook.id,
+          filename: file,
           title: note.title,
-          notebookId: note.notebookId,
-          tags: note.tags,
-          pinned: note.pinned,
-          status: note.status,
           createdAt: note.createdAt,
           updatedAt: note.updatedAt,
-        });
+        };
       } catch {
         continue;
       }
     }
   }
+
+  await writeNoteIndex(baseDir, index);
+  return index;
+}
+
+async function ensureNoteIndex(baseDir: string): Promise<NoteIndex> {
+  const current = await readNoteIndex(baseDir);
+  if (current) {
+    return current;
+  }
+
+  return rebuildNoteIndex(baseDir);
+}
+
+async function upsertIndexEntry(baseDir: string, note: Note): Promise<void> {
+  const index = await ensureNoteIndex(baseDir);
+  index[note.id] = {
+    notebookId: note.notebookId,
+    filename: stableNoteFilename(note),
+    title: note.title,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+  };
+  await writeNoteIndex(baseDir, index);
+}
+
+async function removeIndexEntry(baseDir: string, noteId: string): Promise<void> {
+  const index = await ensureNoteIndex(baseDir);
+  delete index[noteId];
+  await writeNoteIndex(baseDir, index);
+}
+
+export async function findNoteFile(
+  baseDir: string,
+  notebookId: string,
+  noteId: string
+): Promise<string | null> {
+  const resolveFromIndex = async (): Promise<string | null> => {
+    const index = await ensureNoteIndex(baseDir);
+    const entry = index[noteId];
+    if (!entry || entry.notebookId !== notebookId) {
+      return null;
+    }
+
+    const filePath = path.join(baseDir, notebookId, entry.filename);
+    if (!(await pathExists(filePath))) {
+      return null;
+    }
+
+    try {
+      const note = await readNoteFile(filePath, notebookId);
+      return note.id === noteId ? entry.filename : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const indexed = await resolveFromIndex();
+  if (indexed) {
+    return indexed;
+  }
+
+  const rebuilt = await rebuildNoteIndex(baseDir);
+  const entry = rebuilt[noteId];
+  return entry?.notebookId === notebookId ? entry.filename : null;
+}
+
+export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
+  const fromIndex = async (index: NoteIndex): Promise<NoteMeta[] | null> => {
+    const notes: NoteMeta[] = [];
+
+    for (const [noteId, entry] of Object.entries(index)) {
+      const filePath = path.join(baseDir, entry.notebookId, entry.filename);
+      if (!(await pathExists(filePath))) {
+        return null;
+      }
+
+      try {
+        const note = await readNoteFile(filePath, entry.notebookId);
+        if (note.id !== noteId) {
+          return null;
+        }
+        notes.push(noteToMeta(note));
+      } catch {
+        return null;
+      }
+    }
+
+    return notes;
+  };
+
+  const currentIndex = await ensureNoteIndex(baseDir);
+  const indexedNotes = await fromIndex(currentIndex);
+  const notes = indexedNotes ?? (await fromIndex(await rebuildNoteIndex(baseDir))) ?? [];
 
   return notes.sort(
     (left, right) =>
@@ -570,7 +711,9 @@ export async function createNote(
     body: payload.body ?? '',
   };
 
-  return writeNote(baseDir, note);
+  const created = await writeNote(baseDir, note);
+  await upsertIndexEntry(baseDir, created);
+  return created;
 }
 
 export async function updateNote(
@@ -605,7 +748,9 @@ export async function updateNote(
     updatedAt: new Date().toISOString(),
   };
 
-  return writeNote(baseDir, updated, { currentFilename });
+  const saved = await writeNote(baseDir, updated, { currentFilename });
+  await upsertIndexEntry(baseDir, saved);
+  return saved;
 }
 
 export async function deleteNote(
@@ -620,6 +765,7 @@ export async function deleteNote(
 
   try {
     await fs.unlink(path.join(baseDir, notebookId, filename));
+    await removeIndexEntry(baseDir, noteId);
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to delete note.', {
       details: error instanceof Error ? error.message : undefined,
@@ -656,5 +802,7 @@ export async function moveNote(
     updatedAt: new Date().toISOString(),
   };
 
-  return writeNote(baseDir, moved);
+  const saved = await writeNote(baseDir, moved);
+  await upsertIndexEntry(baseDir, saved);
+  return saved;
 }

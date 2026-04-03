@@ -8,11 +8,14 @@ import {
   createNote,
   ensureBaseDir,
   moveNote,
+  rebuildNoteIndex,
   listAllNotes,
   listNotebooks,
   renameNotebook,
   sanitizeNotebookName,
+  updateNote,
   updateSettings,
+  deleteNote,
 } from './storage';
 
 const tempDirs: string[] = [];
@@ -110,5 +113,95 @@ describe('storage', () => {
     expect(notes.find((note) => note.id === created.id)?.notebookId).toBe(
       'Inbox Two'
     );
+  });
+
+  it('maintains a persisted index across note mutations', async () => {
+    const baseDir = await createTempWorkspace();
+    await createNotebook(baseDir, 'Docs');
+    const created = await createNote(baseDir, {
+      notebookId: 'Docs',
+      title: 'Alpha',
+    });
+
+    let index = JSON.parse(
+      await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
+    ) as Record<string, { notebookId: string; filename: string }>;
+    expect(index[created.id]?.notebookId).toBe('Docs');
+    expect(index[created.id]?.filename).toContain('--');
+
+    const renamed = await updateNote(baseDir, {
+      id: created.id,
+      notebookId: 'Docs',
+      title: 'Beta',
+    });
+    index = JSON.parse(
+      await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
+    ) as Record<string, { notebookId: string; filename: string }>;
+    expect(index[created.id]?.filename).toContain('beta');
+    expect(index[created.id]?.filename).toContain(renamed.id.slice(0, 8));
+
+    await createNotebook(baseDir, 'Archive');
+    await moveNote(baseDir, created.id, 'Docs', 'Archive');
+    index = JSON.parse(
+      await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
+    ) as Record<string, { notebookId: string; filename: string }>;
+    expect(index[created.id]?.notebookId).toBe('Archive');
+
+    await renameNotebook(baseDir, 'Archive', 'Archive 2026');
+    index = JSON.parse(
+      await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
+    ) as Record<string, { notebookId: string; filename: string }>;
+    expect(index[created.id]?.notebookId).toBe('Archive 2026');
+
+    await deleteNote(baseDir, 'Archive 2026', created.id);
+    index = JSON.parse(
+      await fs.readFile(path.join(baseDir, '.index.json'), 'utf-8')
+    ) as Record<string, { notebookId: string; filename: string }>;
+    expect(index[created.id]).toBeUndefined();
+  });
+
+  it('recovers from index inconsistencies by rebuilding automatically', async () => {
+    const baseDir = await createTempWorkspace();
+    const note = await createNote(baseDir, { notebookId: 'Inbox', title: 'Recover' });
+    const indexPath = path.join(baseDir, '.index.json');
+
+    await fs.writeFile(
+      indexPath,
+      JSON.stringify(
+        {
+          [note.id]: {
+            notebookId: 'Inbox',
+            filename: 'missing.md',
+            title: 'Recover',
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt,
+          },
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    const notes = await listAllNotes(baseDir);
+    expect(notes.map((entry) => entry.id)).toContain(note.id);
+
+    const rebuilt = JSON.parse(await fs.readFile(indexPath, 'utf-8')) as Record<
+      string,
+      { filename: string }
+    >;
+    expect(rebuilt[note.id]?.filename).not.toBe('missing.md');
+  });
+
+  it('rebuilds index through explicit internal command', async () => {
+    const baseDir = await createTempWorkspace();
+    const first = await createNote(baseDir, { notebookId: 'Inbox', title: 'One' });
+    await createNote(baseDir, { notebookId: 'Inbox', title: 'Two' });
+
+    await fs.writeFile(path.join(baseDir, '.index.json'), '{}', 'utf-8');
+
+    const rebuilt = await rebuildNoteIndex(baseDir);
+    expect(Object.keys(rebuilt)).toContain(first.id);
+    expect(Object.keys(rebuilt)).toHaveLength(2);
   });
 });
