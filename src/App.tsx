@@ -84,7 +84,8 @@ function App() {
   }
 
   return (
-    <div className="workbench-shell p-4">
+    <div className="workbench-shell p-4 pt-10">
+      <div className="window-drag-region absolute inset-x-0 top-0 h-8" />
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-[28px] border border-[var(--border-subtle)]">
         <Sidebar
           profileName={profile.shortName}

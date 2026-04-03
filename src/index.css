@@ -198,6 +198,15 @@
     @apply relative flex h-screen overflow-hidden;
   }
 
+  .window-drag-region {
+    -webkit-app-region: drag;
+    user-select: none;
+  }
+
+  .window-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
   .workbench-shell::before {
     content: '';
     position: absolute;
