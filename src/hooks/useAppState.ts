@@ -14,6 +14,7 @@ interface AppState {
   profile: DesktopProfile;
   notebooks: Notebook[];
   notes: NoteMeta[];
+  trashNotes: NoteMeta[];
   selectedNoteId: string | null;
   activeNote: Note | null;
   activeFilter: string;
@@ -47,6 +48,7 @@ export default function useAppState() {
     profile: DEFAULT_PROFILE,
     notebooks: [],
     notes: [],
+    trashNotes: [],
     selectedNoteId: null,
     activeNote: null,
     activeFilter: 'all',
@@ -57,10 +59,11 @@ export default function useAppState() {
 
   const refresh = useCallback(async () => {
     try {
-      const [profile, notebooks, notes, settings] = await Promise.all([
+      const [profile, notebooks, notes, trashNotes, settings] = await Promise.all([
         window.desktopApi.getProfile(),
         window.desktopApi.listNotebooks(),
         window.desktopApi.listNotes(),
+        window.desktopApi.listTrashNotes(),
         window.desktopApi.getSettings(),
       ]);
 
@@ -69,12 +72,14 @@ export default function useAppState() {
         profile,
         notebooks,
         notes: sortNotes(notes),
+        trashNotes: sortNotes(trashNotes),
         settings,
         loading: false,
         error: null,
         activeFilter:
           prev.activeFilter !== 'all' &&
           prev.activeFilter !== 'pinned' &&
+          prev.activeFilter !== 'trash' &&
           !notebooks.some((notebook) => notebook.id === prev.activeFilter)
             ? 'all'
             : prev.activeFilter,
@@ -103,7 +108,9 @@ export default function useAppState() {
         return;
       }
 
-      const meta = state.notes.find((note) => note.id === noteId);
+      const meta = [...state.notes, ...state.trashNotes].find(
+        (note) => note.id === noteId
+      );
       if (!meta) {
         return;
       }
@@ -123,7 +130,7 @@ export default function useAppState() {
         }));
       }
     },
-    [state.notes]
+    [state.notes, state.trashNotes]
   );
 
   const setFilter = useCallback((filter: string) => {
@@ -163,6 +170,9 @@ export default function useAppState() {
           ...prev,
           notebooks: prev.notebooks.filter((notebook) => notebook.id !== id),
           notes: prev.notes.filter((note) => note.notebookId !== id),
+          trashNotes: prev.trashNotes.filter(
+            (note) => note.notebookId !== id && note.originalNotebookId !== id
+          ),
           selectedNoteId:
             prev.activeNote?.notebookId === id ? null : prev.selectedNoteId,
           activeNote: prev.activeNote?.notebookId === id ? null : prev.activeNote,
@@ -227,6 +237,7 @@ export default function useAppState() {
       setState((prev) => ({
         ...prev,
         notes: sortNotes([meta, ...prev.notes]),
+        trashNotes: prev.trashNotes,
         selectedNoteId: note.id,
         activeNote: note,
         activeFilter: payload.notebookId,
@@ -277,9 +288,21 @@ export default function useAppState() {
   const deleteNote = useCallback(async (notebookId: string, noteId: string) => {
     try {
       await window.desktopApi.deleteNote(notebookId, noteId);
+      const trashedMeta = state.notes.find((note) => note.id === noteId);
       setState((prev) => ({
         ...prev,
         notes: prev.notes.filter((note) => note.id !== noteId),
+        trashNotes: trashedMeta
+          ? sortNotes([
+              {
+                ...trashedMeta,
+                notebookId: '.trash',
+                originalNotebookId: notebookId,
+                deletedAt: new Date().toISOString(),
+              },
+              ...prev.trashNotes,
+            ])
+          : prev.trashNotes,
         selectedNoteId: prev.selectedNoteId === noteId ? null : prev.selectedNoteId,
         activeNote: prev.selectedNoteId === noteId ? null : prev.activeNote,
         error: null,
@@ -288,6 +311,56 @@ export default function useAppState() {
       setState((prev) => ({
         ...prev,
         error: getErrorMessage(error, 'Failed to delete note.'),
+      }));
+    }
+  }, [state.notes]);
+
+  const restoreNote = useCallback(async (noteId: string) => {
+    try {
+      const restored = await window.desktopApi.restoreNote(noteId);
+      const meta = {
+        id: restored.id,
+        title: restored.title,
+        notebookId: restored.notebookId,
+        originalNotebookId: restored.originalNotebookId,
+        tags: restored.tags,
+        pinned: restored.pinned,
+        status: restored.status,
+        createdAt: restored.createdAt,
+        updatedAt: restored.updatedAt,
+        deletedAt: restored.deletedAt,
+      };
+      setState((prev) => ({
+        ...prev,
+        notes: sortNotes([meta, ...prev.notes.filter((note) => note.id !== noteId)]),
+        trashNotes: prev.trashNotes.filter((note) => note.id !== noteId),
+        selectedNoteId: noteId,
+        activeNote: restored,
+        activeFilter: restored.notebookId,
+        error: null,
+      }));
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to restore note.'),
+      }));
+    }
+  }, []);
+
+  const purgeNote = useCallback(async (noteId: string) => {
+    try {
+      await window.desktopApi.purgeNote(noteId);
+      setState((prev) => ({
+        ...prev,
+        trashNotes: prev.trashNotes.filter((note) => note.id !== noteId),
+        selectedNoteId: prev.selectedNoteId === noteId ? null : prev.selectedNoteId,
+        activeNote: prev.selectedNoteId === noteId ? null : prev.activeNote,
+        error: null,
+      }));
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, 'Failed to permanently delete note.'),
       }));
     }
   }, []);
@@ -378,8 +451,12 @@ export default function useAppState() {
       return state.notes.filter((note) => note.pinned);
     }
 
+    if (state.activeFilter === 'trash') {
+      return state.trashNotes;
+    }
+
     return state.notes.filter((note) => note.notebookId === state.activeFilter);
-  }, [state.activeFilter, state.notes]);
+  }, [state.activeFilter, state.notes, state.trashNotes]);
 
   const filterTitle = useMemo(() => {
     if (state.activeFilter === 'all') {
@@ -388,6 +465,9 @@ export default function useAppState() {
 
     if (state.activeFilter === 'pinned') {
       return 'Pinned Notes';
+    }
+    if (state.activeFilter === 'trash') {
+      return 'Trash';
     }
 
     return (
@@ -410,6 +490,8 @@ export default function useAppState() {
     createNote,
     updateNote,
     deleteNote,
+    restoreNote,
+    purgeNote,
     moveNote,
     togglePin,
     patchSettings,

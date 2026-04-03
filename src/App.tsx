@@ -21,6 +21,7 @@ function App() {
     profile,
     notebooks,
     notes,
+    trashNotes,
     filteredNotes,
     filterTitle,
     selectedNoteId,
@@ -38,6 +39,8 @@ function App() {
     createNote,
     updateNote,
     deleteNote,
+    restoreNote,
+    purgeNote,
     moveNote,
     togglePin,
     patchSettings,
@@ -46,7 +49,11 @@ function App() {
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
 
   const getTargetNotebook = useCallback((): string => {
-    if (activeFilter !== 'all' && activeFilter !== 'pinned') {
+    if (
+      activeFilter !== 'all' &&
+      activeFilter !== 'pinned' &&
+      activeFilter !== 'trash'
+    ) {
       return activeFilter;
     }
 
@@ -223,6 +230,7 @@ function App() {
             activeItem={activeFilter}
             onItemClick={setFilter}
             totalNotes={notes.length}
+            trashCount={trashNotes.length}
             onCreateNotebook={createNotebook}
             onRenameNotebook={renameNotebook}
             onDeleteNotebook={deleteNotebook}
@@ -237,7 +245,10 @@ function App() {
             onNoteSelect={(id) => void selectNote(id)}
             onCreateNote={() => void handleCreateNote()}
             onDeleteNote={(notebookId, noteId) => void deleteNote(notebookId, noteId)}
+            onRestoreNote={(noteId) => void restoreNote(noteId)}
+            onPurgeNote={(noteId) => void purgeNote(noteId)}
             onTogglePin={(id) => void togglePin(id)}
+            isTrashView={activeFilter === 'trash'}
           />
         ) : null}
 

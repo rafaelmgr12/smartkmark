@@ -15,7 +15,10 @@ import {
   listAllNotes,
   listNotebooks,
   moveNote,
+  purgeDeletedNotes,
+  purgeNote,
   renameNotebook,
+  restoreNote,
   serializeAppError,
   updateNote,
   updateSettings,
@@ -139,6 +142,9 @@ registerHandler('notebooks:delete', async (id: string) =>
 );
 
 registerHandler('notes:list', async () => listAllNotes(dataDir()));
+registerHandler('notes:listTrash', async () =>
+  listAllNotes(dataDir(), { onlyDeleted: true })
+);
 registerHandler('notes:get', async (notebookId: string, noteId: string) =>
   getNote(dataDir(), notebookId, noteId)
 );
@@ -164,6 +170,12 @@ registerHandler(
   async (notebookId: string, noteId: string) =>
     deleteNote(dataDir(), notebookId, noteId)
 );
+registerHandler('notes:restore', async (noteId: string) =>
+  restoreNote(dataDir(), noteId)
+);
+registerHandler('notes:purge', async (noteId: string) =>
+  purgeNote(dataDir(), noteId)
+);
 registerHandler(
   'notes:move',
   async (noteId: string, fromNotebookId: string, toNotebookId: string) =>
@@ -177,4 +189,7 @@ registerHandler('settings:update', async (patch: Record<string, unknown>) =>
     dataDir(),
     patch as Parameters<typeof updateSettings>[1]
   )
+);
+registerHandler('storage:trashCleanup', async (olderThanDays?: number) =>
+  purgeDeletedNotes(dataDir(), { olderThanDays })
 );

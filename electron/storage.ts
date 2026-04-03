@@ -19,11 +19,13 @@ export interface NoteMeta {
   id: string;
   title: string;
   notebookId: string;
+  originalNotebookId?: string;
   tags: NoteTag[];
   pinned: boolean;
   status: NoteStatus;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 }
 
 export interface Note extends NoteMeta {
@@ -64,6 +66,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const SETTINGS_FILE = 'settings.json';
 const NOTEBOOK_NAME_PATTERN = /[<>:"/\\|?*]/g;
+const TRASH_NOTEBOOK_ID = '.trash';
+const TRASH_NOTEBOOKS_DIR = path.join(TRASH_NOTEBOOK_ID, 'notebooks');
 
 export class AppError extends Error {
   code: DesktopErrorCode;
@@ -167,6 +171,8 @@ export async function ensureBaseDir(baseDir: string): Promise<void> {
   await fs.mkdir(baseDir, { recursive: true });
   const inboxDir = path.join(baseDir, 'Inbox');
   await fs.mkdir(inboxDir, { recursive: true });
+  await fs.mkdir(path.join(baseDir, TRASH_NOTEBOOK_ID), { recursive: true });
+  await fs.mkdir(path.join(baseDir, TRASH_NOTEBOOKS_DIR), { recursive: true });
 }
 
 function settingsPath(baseDir: string): string {
@@ -261,7 +267,7 @@ export async function listNotebooks(baseDir: string): Promise<Notebook[]> {
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && entry.name !== TRASH_NOTEBOOK_ID)
       .map((entry) => ({ id: entry.name, name: entry.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
@@ -326,6 +332,10 @@ export async function deleteNotebook(
   baseDir: string,
   id: string
 ): Promise<void> {
+  if (id === TRASH_NOTEBOOK_ID) {
+    throw new AppError('VALIDATION_ERROR', 'Trash notebook cannot be deleted.');
+  }
+
   const notebookPath = path.join(baseDir, id);
 
   if (!(await pathExists(notebookPath))) {
@@ -333,7 +343,19 @@ export async function deleteNotebook(
   }
 
   try {
+    const notes = await listAllNotes(baseDir, { includeDeleted: true });
+    const notebookNotes = notes.filter((note) => note.notebookId === id);
+    await Promise.all(
+      notebookNotes.map((note) => deleteNote(baseDir, id, note.id))
+    );
     await fs.rm(notebookPath, { recursive: true, force: true });
+    const deletedAt = new Date().toISOString();
+    const tombstonePath = path.join(baseDir, TRASH_NOTEBOOKS_DIR, `${id}.json`);
+    await fs.writeFile(
+      tombstonePath,
+      JSON.stringify({ id, deletedAt }, null, 2),
+      'utf-8'
+    );
     const notebooks = await listNotebooks(baseDir);
     if (notebooks.length === 0) {
       await fs.mkdir(path.join(baseDir, 'Inbox'), { recursive: true });
@@ -386,6 +408,10 @@ function buildNote(
         ? frontmatter.title
         : 'Untitled',
     notebookId,
+    originalNotebookId:
+      typeof frontmatter.originalNotebookId === 'string'
+        ? frontmatter.originalNotebookId
+        : undefined,
     tags: normalizeTags(frontmatter.tags),
     pinned: Boolean(frontmatter.pinned),
     status:
@@ -402,12 +428,16 @@ function buildNote(
       typeof frontmatter.updatedAt === 'string'
         ? frontmatter.updatedAt
         : now,
+    deletedAt:
+      typeof frontmatter.deletedAt === 'string'
+        ? frontmatter.deletedAt
+        : undefined,
     body,
   };
 }
 
 function noteToFileContent(note: Note): string {
-  return matter.stringify(note.body, {
+  const data: Record<string, unknown> = {
     id: note.id,
     title: note.title,
     tags: note.tags,
@@ -415,6 +445,18 @@ function noteToFileContent(note: Note): string {
     status: note.status,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+  };
+
+  if (note.originalNotebookId) {
+    data.originalNotebookId = note.originalNotebookId;
+  }
+
+  if (note.deletedAt) {
+    data.deletedAt = note.deletedAt;
+  }
+
+  return matter.stringify(note.body, {
+    ...data,
   });
 }
 
@@ -467,8 +509,19 @@ export async function findNoteFile(
   return null;
 }
 
-export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
-  const notebooks = await listNotebooks(baseDir);
+export async function listAllNotes(
+  baseDir: string,
+  options?: { includeDeleted?: boolean; onlyDeleted?: boolean }
+): Promise<NoteMeta[]> {
+  const includeDeleted = options?.includeDeleted ?? false;
+  const onlyDeleted = options?.onlyDeleted ?? false;
+  const notebookEntries = await fs.readdir(baseDir, { withFileTypes: true });
+  const notebooks = notebookEntries
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) =>
+      includeDeleted || onlyDeleted ? true : entry.name !== TRASH_NOTEBOOK_ID
+    )
+    .map((entry) => ({ id: entry.name, name: entry.name }));
   const notes: NoteMeta[] = [];
 
   for (const notebook of notebooks) {
@@ -492,11 +545,13 @@ export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
           id: note.id,
           title: note.title,
           notebookId: note.notebookId,
+          originalNotebookId: note.originalNotebookId,
           tags: note.tags,
           pinned: note.pinned,
           status: note.status,
           createdAt: note.createdAt,
           updatedAt: note.updatedAt,
+          deletedAt: note.deletedAt,
         });
       } catch {
         continue;
@@ -504,7 +559,17 @@ export async function listAllNotes(baseDir: string): Promise<NoteMeta[]> {
     }
   }
 
-  return notes.sort(
+  const visible = notes.filter((note) => {
+    if (onlyDeleted) {
+      return Boolean(note.deletedAt);
+    }
+    if (!includeDeleted) {
+      return !note.deletedAt;
+    }
+    return true;
+  });
+
+  return visible.sort(
     (left, right) =>
       new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
@@ -619,12 +684,76 @@ export async function deleteNote(
   }
 
   try {
-    await fs.unlink(path.join(baseDir, notebookId, filename));
+    const sourcePath = path.join(baseDir, notebookId, filename);
+    const existing = await readNoteFile(sourcePath, notebookId);
+    const deleted: Note = {
+      ...existing,
+      notebookId: TRASH_NOTEBOOK_ID,
+      originalNotebookId: existing.originalNotebookId ?? notebookId,
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await writeNote(baseDir, deleted);
+    await fs.unlink(sourcePath);
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to delete note.', {
       details: error instanceof Error ? error.message : undefined,
     });
   }
+}
+
+export async function restoreNote(baseDir: string, noteId: string): Promise<Note> {
+  const filename = await findNoteFile(baseDir, TRASH_NOTEBOOK_ID, noteId);
+  if (!filename) {
+    throw new AppError('NOT_FOUND', `Note "${noteId}" was not found in trash.`);
+  }
+
+  const trashed = await readNoteFile(
+    path.join(baseDir, TRASH_NOTEBOOK_ID, filename),
+    TRASH_NOTEBOOK_ID
+  );
+  const preferredNotebook = trashed.originalNotebookId ?? 'Inbox';
+  const notebooks = await listNotebooks(baseDir);
+  const targetNotebook = notebooks.some((notebook) => notebook.id === preferredNotebook)
+    ? preferredNotebook
+    : 'Inbox';
+  const restored: Note = {
+    ...trashed,
+    notebookId: targetNotebook,
+    deletedAt: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const saved = await writeNote(baseDir, restored);
+  await fs.unlink(path.join(baseDir, TRASH_NOTEBOOK_ID, filename));
+  return saved;
+}
+
+export async function purgeNote(baseDir: string, noteId: string): Promise<void> {
+  const filename = await findNoteFile(baseDir, TRASH_NOTEBOOK_ID, noteId);
+  if (!filename) {
+    return;
+  }
+
+  await fs.unlink(path.join(baseDir, TRASH_NOTEBOOK_ID, filename));
+}
+
+export async function purgeDeletedNotes(
+  baseDir: string,
+  options?: { olderThanDays?: number }
+): Promise<number> {
+  const days = options?.olderThanDays ?? 30;
+  const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
+  const trashed = await listAllNotes(baseDir, { onlyDeleted: true });
+  const expired = trashed.filter((note) => {
+    if (!note.deletedAt) {
+      return false;
+    }
+    return new Date(note.deletedAt).getTime() <= threshold;
+  });
+
+  await Promise.all(expired.map((note) => purgeNote(baseDir, note.id)));
+  return expired.length;
 }
 
 export async function moveNote(

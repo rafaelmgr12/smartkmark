@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('desktopApi', {
   deleteNotebook: (id: string) => invoke('notebooks:delete', id),
 
   listNotes: () => invoke('notes:list'),
+  listTrashNotes: () => invoke('notes:listTrash'),
   getNote: (notebookId: string, noteId: string) =>
     invoke('notes:get', notebookId, noteId),
   createNote: (payload: { notebookId: string; title: string; body?: string }) =>
@@ -51,6 +52,8 @@ contextBridge.exposeInMainWorld('desktopApi', {
   }) => invoke('notes:update', payload),
   deleteNote: (notebookId: string, noteId: string) =>
     invoke('notes:delete', notebookId, noteId),
+  restoreNote: (noteId: string) => invoke('notes:restore', noteId),
+  purgeNote: (noteId: string) => invoke('notes:purge', noteId),
   moveNote: (noteId: string, fromNotebookId: string, toNotebookId: string) =>
     invoke('notes:move', noteId, fromNotebookId, toNotebookId),
 

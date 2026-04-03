@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import SidebarItem from './SidebarItem';
 import SidebarSection from './SidebarSection';
+import TrashNavItem from './TrashNavItem';
 import UserProfile from './UserProfile';
 import type { Notebook } from '../../types';
 
@@ -20,6 +21,7 @@ interface SidebarProps {
   activeItem: string;
   onItemClick: (id: string) => void;
   totalNotes: number;
+  trashCount: number;
   onCreateNotebook: (name: string) => Promise<Notebook | null>;
   onRenameNotebook: (id: string, name: string) => Promise<Notebook | null>;
   onDeleteNotebook: (id: string) => Promise<void>;
@@ -31,6 +33,7 @@ export default function Sidebar({
   activeItem,
   onItemClick,
   totalNotes,
+  trashCount,
   onCreateNotebook,
   onRenameNotebook,
   onDeleteNotebook,
@@ -101,6 +104,11 @@ export default function Sidebar({
           icon={Pin}
           active={activeItem === 'pinned'}
           onClick={() => onItemClick('pinned')}
+        />
+        <TrashNavItem
+          active={activeItem === 'trash'}
+          count={trashCount}
+          onClick={() => onItemClick('trash')}
         />
       </div>
 
