@@ -36,49 +36,122 @@ import { pathToFileURL } from 'node:url';
 
 const isDev = !app.isPackaged;
 const execFileAsync = promisify(execFile);
+const ZIP_ARCHIVE_FILTERS = [{ name: 'ZIP Archives', extensions: ['zip'] }];
+const SETTINGS_PATCH_KEYS = [
+  'theme',
+  'layoutMode',
+  'editorFontSize',
+  'lineWrap',
+  'previewOpen',
+] as const satisfies readonly (keyof AppSettings)[];
+const NOTES_CREATE_KEYS = ['notebookId', 'title', 'body'] as const;
+const NOTES_UPDATE_KEYS = [
+  'id',
+  'notebookId',
+  'title',
+  'body',
+  'tags',
+  'pinned',
+  'status',
+] as const;
 
 type Schema<T> = {
   parse: (input: unknown) => T;
 };
 
+type AsyncHandler<Payload> = (payload: Payload) => Promise<unknown>;
+type AsyncVoidHandler = () => Promise<unknown>;
+
 function schemaError(message: string): never {
   throw new AppError('VALIDATION_ERROR', message);
 }
 
-function isSafeExternalUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
+function parseObjectRecord(input: unknown, message: string): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    schemaError(message);
+  }
 
-    if (url.protocol === 'https:') {
-      return true;
+  return input as Record<string, unknown>;
+}
+
+function assertOnlyAllowedKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  message: (key: string) => string
+) {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.includes(key)) {
+      schemaError(message(key));
     }
-
-    if (url.protocol === 'mailto:') {
-      return true;
-    }
-
-    if (isDev && url.protocol === 'http:' && url.hostname === 'localhost') {
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
   }
 }
 
-function isAllowedAppUrl(rawUrl: string, appUrl: URL): boolean {
+function parseUrl(rawUrl: string): URL | null {
   try {
-    const url = new URL(rawUrl);
-
-    if (isDev) {
-      return url.origin === appUrl.origin;
-    }
-
-    return url.protocol === 'file:' && url.pathname === appUrl.pathname;
+    return new URL(rawUrl);
   } catch {
+    return null;
+  }
+}
+
+function isSafeExternalUrl(rawUrl: string): boolean {
+  const url = parseUrl(rawUrl);
+
+  if (!url) {
     return false;
   }
+
+  if (url.protocol === 'https:' || url.protocol === 'mailto:') {
+    return true;
+  }
+
+  return isDev && url.protocol === 'http:' && url.hostname === 'localhost';
+}
+
+function isAllowedAppUrl(rawUrl: string, appUrl: URL): boolean {
+  const url = parseUrl(rawUrl);
+
+  if (!url) {
+    return false;
+  }
+
+  if (isDev) {
+    return url.origin === appUrl.origin;
+  }
+
+  return url.protocol === 'file:' && url.pathname === appUrl.pathname;
+}
+
+function getAppEntryUrl(): URL {
+  return isDev
+    ? new URL('http://localhost:5173')
+    : pathToFileURL(path.join(__dirname, '../dist/index.html'));
+}
+
+function openExternalIfSafe(url: string) {
+  if (isSafeExternalUrl(url)) {
+    void shell.openExternal(url);
+  }
+}
+
+function configureWindowNavigation(mainWindow: BrowserWindow, appUrl: URL) {
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedAppUrl(url, appUrl)) {
+      return;
+    }
+
+    event.preventDefault();
+    openExternalIfSafe(url);
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalIfSafe(url);
+    return { action: 'deny' };
+  });
+}
+
+function wrapIpcError(error: unknown): never {
+  throw new Error(serializeAppError(error));
 }
 
 const nonEmptyStringSchema: Schema<string> = {
@@ -108,16 +181,8 @@ const noteStatusSchema: Schema<NoteStatus> = {
 
 const noteTagSchema: Schema<NoteTag> = {
   parse(input) {
-    if (!input || typeof input !== 'object') {
-      schemaError('Expected a note tag object.');
-    }
-
-    const value = input as Record<string, unknown>;
-    const keys = Object.keys(value);
-
-    if (keys.some((key) => key !== 'label' && key !== 'color')) {
-      schemaError('Unexpected fields in note tag payload.');
-    }
+    const value = parseObjectRecord(input, 'Expected a note tag object.');
+    assertOnlyAllowedKeys(value, ['label', 'color'], () => 'Unexpected fields in note tag payload.');
 
     return {
       label: typeof value.label === 'string' ? value.label : schemaError('Expected tag label string.'),
@@ -128,24 +193,8 @@ const noteTagSchema: Schema<NoteTag> = {
 
 const settingsPatchSchema: Schema<Partial<AppSettings>> = {
   parse(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) {
-      schemaError('Expected settings patch object.');
-    }
-
-    const value = input as Record<string, unknown>;
-    const allowedKeys: (keyof AppSettings)[] = [
-      'theme',
-      'layoutMode',
-      'editorFontSize',
-      'lineWrap',
-      'previewOpen',
-    ];
-
-    for (const key of Object.keys(value)) {
-      if (!allowedKeys.includes(key as keyof AppSettings)) {
-        schemaError(`Unexpected settings field: ${key}.`);
-      }
-    }
+    const value = parseObjectRecord(input, 'Expected settings patch object.');
+    assertOnlyAllowedKeys(value, SETTINGS_PATCH_KEYS, (key) => `Unexpected settings field: ${key}.`);
 
     if (
       value.theme !== undefined &&
@@ -252,24 +301,24 @@ function dataDir(): string {
 function registerValidatedHandler<Payload>(
   channel: string,
   schema: Schema<Payload>,
-  handler: (payload: Payload) => Promise<unknown>
+  handler: AsyncHandler<Payload>
 ) {
   ipcMain.handle(channel, async (_event, ...rawArgs: unknown[]) => {
     try {
       const payload = schema.parse(rawArgs);
       return await handler(payload);
     } catch (error) {
-      throw new Error(serializeAppError(error));
+      wrapIpcError(error);
     }
   });
 }
 
-function registerHandler(channel: string, handler: () => Promise<unknown>) {
+function registerHandler(channel: string, handler: AsyncVoidHandler) {
   ipcMain.handle(channel, async () => {
     try {
       return await handler();
     } catch (error) {
-      throw new Error(serializeAppError(error));
+      wrapIpcError(error);
     }
   });
 }
@@ -280,16 +329,8 @@ const notesCreateSchema: Schema<{
   body?: string;
 }> = {
   parse(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) {
-      schemaError('Expected notes:create payload object.');
-    }
-
-    const value = input as Record<string, unknown>;
-    const keys = Object.keys(value);
-
-    if (keys.some((key) => key !== 'notebookId' && key !== 'title' && key !== 'body')) {
-      schemaError('Unexpected fields in notes:create payload.');
-    }
+    const value = parseObjectRecord(input, 'Expected notes:create payload object.');
+    assertOnlyAllowedKeys(value, NOTES_CREATE_KEYS, () => 'Unexpected fields in notes:create payload.');
 
     if (typeof value.notebookId !== 'string' || value.notebookId.trim().length === 0) {
       schemaError('notes:create notebookId must be a non-empty string.');
@@ -321,18 +362,12 @@ const notesUpdateSchema: Schema<{
   status?: NoteStatus;
 }> = {
   parse(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) {
-      schemaError('Expected notes:update payload object.');
-    }
-
-    const value = input as Record<string, unknown>;
-    const allowed = ['id', 'notebookId', 'title', 'body', 'tags', 'pinned', 'status'];
-
-    for (const key of Object.keys(value)) {
-      if (!allowed.includes(key)) {
-        schemaError(`Unexpected fields in notes:update payload: ${key}.`);
-      }
-    }
+    const value = parseObjectRecord(input, 'Expected notes:update payload object.');
+    assertOnlyAllowedKeys(
+      value,
+      NOTES_UPDATE_KEYS,
+      (key) => `Unexpected fields in notes:update payload: ${key}.`
+    );
 
     if (typeof value.id !== 'string' || value.id.trim().length === 0) {
       schemaError('notes:update id must be a non-empty string.');
@@ -395,8 +430,8 @@ const notesRestoreSchema: Schema<[string, string | undefined]> = {
   },
 };
 
-async function createWindow(): Promise<void> {
-  const window = new BrowserWindow({
+function createMainWindow(): BrowserWindow {
+  const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1080,
@@ -411,116 +446,26 @@ async function createWindow(): Promise<void> {
     },
   });
 
-  const appUrl = isDev
-    ? new URL('http://localhost:5173')
-    : pathToFileURL(path.join(__dirname, '../dist/index.html'));
+  configureWindowNavigation(mainWindow, getAppEntryUrl());
+  return mainWindow;
+}
 
-  window.webContents.on('will-navigate', (event, url) => {
-    if (isAllowedAppUrl(url, appUrl)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (isSafeExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-  });
-
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-
-    return { action: 'deny' };
-  });
-
+async function loadMainWindow(mainWindow: BrowserWindow): Promise<void> {
+  const appUrl = getAppEntryUrl();
   if (isDev) {
-    await window.loadURL(appUrl.toString());
-    window.webContents.openDevTools({ mode: 'detach' });
+    await mainWindow.loadURL(appUrl.toString());
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
     return;
   }
 
-  await window.loadURL(appUrl.toString());
+  await mainWindow.loadURL(appUrl.toString());
 }
 
-app.whenReady().then(async () => {
-  await ensureBaseDir(dataDir());
-  await runOptionalTrashCleanup(dataDir(), {
-    enabled: process.env.SMARTKMARK_ENABLE_TRASH_CLEANUP === '1',
-  });
-  await createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
-    }
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-registerValidatedHandler('notebooks:list', tupleSchema(), async () => listNotebooks(dataDir()));
-registerValidatedHandler('notebooks:create', tupleSchema(nonEmptyStringSchema), async ([name]) =>
-  createNotebook(dataDir(), name)
-);
-registerValidatedHandler(
-  'notebooks:rename',
-  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
-  async ([id, newName]) => renameNotebook(dataDir(), id, newName)
-);
-registerValidatedHandler('notebooks:delete', tupleSchema(nonEmptyStringSchema), async ([id]) =>
-  deleteNotebook(dataDir(), id)
-);
-
-registerValidatedHandler('notes:list', tupleSchema(), async () => listAllNotes(dataDir()));
-registerValidatedHandler('notes:listDeleted', tupleSchema(), async () =>
-  listDeletedNotes(dataDir())
-);
-registerValidatedHandler(
-  'notes:get',
-  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
-  async ([notebookId, noteId]) => getNote(dataDir(), notebookId, noteId)
-);
-registerValidatedHandler('notes:create', tupleSchema(notesCreateSchema), async ([payload]) =>
-  createNote(dataDir(), payload)
-);
-registerValidatedHandler('notes:update', tupleSchema(notesUpdateSchema), async ([payload]) =>
-  updateNote(dataDir(), payload)
-);
-registerValidatedHandler(
-  'notes:delete',
-  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
-  async ([notebookId, noteId]) => deleteNote(dataDir(), notebookId, noteId)
-);
-registerValidatedHandler('notes:restore', notesRestoreSchema, async ([noteId, notebookId]) =>
-  restoreNote(dataDir(), noteId, notebookId)
-);
-registerValidatedHandler('notes:purge', tupleSchema(nonEmptyStringSchema), async ([noteId]) =>
-  purgeNote(dataDir(), noteId)
-);
-registerValidatedHandler(
-  'notes:move',
-  tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema, nonEmptyStringSchema),
-  async ([noteId, fromNotebookId, toNotebookId]) =>
-    moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
-);
-registerHandler('notes:rebuild-index', async () => rebuildNoteIndex(dataDir()));
-
-registerValidatedHandler('profile:get', tupleSchema(), async () => getDesktopProfile());
-registerValidatedHandler('settings:get', tupleSchema(), async () => getSettings(dataDir()));
-registerValidatedHandler('settings:update', tupleSchema(settingsPatchSchema), async ([patch]) =>
-  updateSettings(dataDir(), patch)
-);
-registerHandler('backup:export', async () => {
+async function exportBackup() {
   const result = await dialog.showSaveDialog({
     title: 'Export SmartKMark workspace backup',
     defaultPath: `smartkmark-workspace-${new Date().toISOString().slice(0, 10)}.zip`,
-    filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+    filters: ZIP_ARCHIVE_FILTERS,
   });
 
   if (result.canceled || !result.filePath) {
@@ -529,13 +474,13 @@ registerHandler('backup:export', async () => {
 
   const exportedPath = await exportWorkspaceBackup(dataDir(), result.filePath);
   return { canceled: false, filePath: exportedPath };
-});
+}
 
-registerHandler('backup:import', async () => {
+async function importBackup() {
   const result = await dialog.showOpenDialog({
     title: 'Import SmartKMark workspace backup',
     properties: ['openFile'],
-    filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+    filters: ZIP_ARCHIVE_FILTERS,
   });
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -544,9 +489,117 @@ registerHandler('backup:import', async () => {
 
   await importWorkspaceBackup(dataDir(), result.filePaths[0]);
   return { canceled: false };
-});
+}
 
-registerHandler('backup:createIncremental', async () => {
+async function createIncrementalWorkspaceBackup() {
   const backupPath = await createIncrementalBackup(dataDir());
   return { filePath: backupPath };
-});
+}
+
+function registerNotebookHandlers() {
+  registerValidatedHandler('notebooks:list', tupleSchema(), async () => listNotebooks(dataDir()));
+  registerValidatedHandler('notebooks:create', tupleSchema(nonEmptyStringSchema), async ([name]) =>
+    createNotebook(dataDir(), name)
+  );
+  registerValidatedHandler(
+    'notebooks:rename',
+    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    async ([id, newName]) => renameNotebook(dataDir(), id, newName)
+  );
+  registerValidatedHandler('notebooks:delete', tupleSchema(nonEmptyStringSchema), async ([id]) =>
+    deleteNotebook(dataDir(), id)
+  );
+}
+
+function registerNoteHandlers() {
+  registerValidatedHandler('notes:list', tupleSchema(), async () => listAllNotes(dataDir()));
+  registerValidatedHandler('notes:listDeleted', tupleSchema(), async () =>
+    listDeletedNotes(dataDir())
+  );
+  registerValidatedHandler(
+    'notes:get',
+    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    async ([notebookId, noteId]) => getNote(dataDir(), notebookId, noteId)
+  );
+  registerValidatedHandler('notes:create', tupleSchema(notesCreateSchema), async ([payload]) =>
+    createNote(dataDir(), payload)
+  );
+  registerValidatedHandler('notes:update', tupleSchema(notesUpdateSchema), async ([payload]) =>
+    updateNote(dataDir(), payload)
+  );
+  registerValidatedHandler(
+    'notes:delete',
+    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    async ([notebookId, noteId]) => deleteNote(dataDir(), notebookId, noteId)
+  );
+  registerValidatedHandler('notes:restore', notesRestoreSchema, async ([noteId, notebookId]) =>
+    restoreNote(dataDir(), noteId, notebookId)
+  );
+  registerValidatedHandler('notes:purge', tupleSchema(nonEmptyStringSchema), async ([noteId]) =>
+    purgeNote(dataDir(), noteId)
+  );
+  registerValidatedHandler(
+    'notes:move',
+    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema, nonEmptyStringSchema),
+    async ([noteId, fromNotebookId, toNotebookId]) =>
+      moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
+  );
+  registerHandler('notes:rebuild-index', async () => rebuildNoteIndex(dataDir()));
+}
+
+function registerProfileHandlers() {
+  registerValidatedHandler('profile:get', tupleSchema(), async () => getDesktopProfile());
+}
+
+function registerSettingsHandlers() {
+  registerValidatedHandler('settings:get', tupleSchema(), async () => getSettings(dataDir()));
+  registerValidatedHandler('settings:update', tupleSchema(settingsPatchSchema), async ([patch]) =>
+    updateSettings(dataDir(), patch)
+  );
+}
+
+function registerBackupHandlers() {
+  registerHandler('backup:export', exportBackup);
+  registerHandler('backup:import', importBackup);
+  registerHandler('backup:createIncremental', createIncrementalWorkspaceBackup);
+}
+
+function registerIpcHandlers() {
+  registerNotebookHandlers();
+  registerNoteHandlers();
+  registerProfileHandlers();
+  registerSettingsHandlers();
+  registerBackupHandlers();
+}
+
+async function openMainWindow() {
+  const mainWindow = createMainWindow();
+  await loadMainWindow(mainWindow);
+}
+
+async function bootstrapApp() {
+  await ensureBaseDir(dataDir());
+  await runOptionalTrashCleanup(dataDir(), {
+    enabled: process.env.SMARTKMARK_ENABLE_TRASH_CLEANUP === '1',
+  });
+  await openMainWindow();
+}
+
+function registerApplicationEvents() {
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void openMainWindow();
+    }
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
+
+registerIpcHandlers();
+registerApplicationEvents();
+
+app.whenReady().then(bootstrapApp);
