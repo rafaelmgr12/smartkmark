@@ -480,6 +480,15 @@ function resolveNotebookPath(baseDir: string, notebookId: string): string {
   return resolvePathWithinBaseDir(baseDir, safeNotebookId);
 }
 
+function resolveNoteFilePath(
+  baseDir: string,
+  notebookId: string,
+  filename: string
+): string {
+  const notebookPath = resolveNotebookPath(baseDir, notebookId);
+  return resolvePathWithinBaseDir(notebookPath, filename);
+}
+
 function trashNotebookPath(baseDir: string): string {
   return resolveNotebookPath(baseDir, TRASH_NOTEBOOK_ID);
 }
@@ -679,7 +688,7 @@ export async function deleteNotebook(
       }
 
       try {
-        const note = await readNoteFile(path.join(notebookPath, file), id);
+        const note = await readNoteFile(resolveNoteFilePath(baseDir, id, file), id);
         await deleteNote(baseDir, id, note.id, deletedAt);
       } catch {
         continue;
@@ -825,7 +834,7 @@ export async function rebuildNoteIndex(baseDir: string): Promise<NoteIndex> {
   const index: NoteIndex = {};
 
   for (const notebook of notebooks) {
-    const notebookPath = path.join(baseDir, notebook.id);
+    const notebookPath = resolveNotebookPath(baseDir, notebook.id);
     let files: string[] = [];
     try {
       files = await fs.readdir(notebookPath);
@@ -839,7 +848,10 @@ export async function rebuildNoteIndex(baseDir: string): Promise<NoteIndex> {
       }
 
       try {
-        const note = await readNoteFile(path.join(notebookPath, file), notebook.id);
+        const note = await readNoteFile(
+          resolveNoteFilePath(baseDir, notebook.id, file),
+          notebook.id
+        );
         index[note.id] = {
           notebookId: notebook.id,
           filename: file,
@@ -896,7 +908,7 @@ export async function findNoteFile(
       return null;
     }
 
-    const filePath = path.join(baseDir, notebookId, entry.filename);
+    const filePath = resolveNoteFilePath(baseDir, notebookId, entry.filename);
     if (!(await pathExists(filePath))) {
       return null;
     }
@@ -927,7 +939,7 @@ export async function listAllNotes(
     const notes: NoteMeta[] = [];
 
     for (const [noteId, entry] of Object.entries(index)) {
-      const filePath = path.join(baseDir, entry.notebookId, entry.filename);
+      const filePath = resolveNoteFilePath(baseDir, entry.notebookId, entry.filename);
       if (!(await pathExists(filePath))) {
         return null;
       }
@@ -979,7 +991,7 @@ export async function getNote(
     throw new AppError('NOT_FOUND', `Note "${noteId}" was not found.`);
   }
 
-  return readNoteFile(path.join(baseDir, notebookId, filename), notebookId);
+  return readNoteFile(resolveNoteFilePath(baseDir, notebookId, filename), notebookId);
 }
 
 async function writeNote(
@@ -987,11 +999,11 @@ async function writeNote(
   note: Note,
   options?: { currentFilename?: string | null }
 ): Promise<Note> {
-  const notebookPath = path.join(baseDir, note.notebookId);
+  const notebookPath = resolveNotebookPath(baseDir, note.notebookId);
   const nextFilename = stableNoteFilename(note);
-  const nextPath = path.join(notebookPath, nextFilename);
+  const nextPath = resolveNoteFilePath(baseDir, note.notebookId, nextFilename);
   const currentPath = options?.currentFilename
-    ? path.join(notebookPath, options.currentFilename)
+    ? resolveNoteFilePath(baseDir, note.notebookId, options.currentFilename)
     : null;
 
   try {
@@ -1016,10 +1028,10 @@ async function moveStoredNote(
   currentFilename: string,
   note: Note
 ): Promise<Note> {
-  const currentPath = path.join(baseDir, currentNotebookId, currentFilename);
-  const nextNotebookPath = path.join(baseDir, note.notebookId);
+  const currentPath = resolveNoteFilePath(baseDir, currentNotebookId, currentFilename);
+  const nextNotebookPath = resolveNotebookPath(baseDir, note.notebookId);
   const nextFilename = stableNoteFilename(note);
-  const nextPath = path.join(nextNotebookPath, nextFilename);
+  const nextPath = resolveNoteFilePath(baseDir, note.notebookId, nextFilename);
 
   try {
     await fs.mkdir(nextNotebookPath, { recursive: true });
@@ -1087,7 +1099,7 @@ export async function updateNote(
   }
 
   const existing = await readNoteFile(
-    path.join(baseDir, payload.notebookId, currentFilename),
+    resolveNoteFilePath(baseDir, payload.notebookId, currentFilename),
     payload.notebookId
   );
 
@@ -1118,7 +1130,7 @@ export async function deleteNote(
   }
 
   try {
-    const note = await readNoteFile(path.join(baseDir, notebookId, filename), notebookId);
+    const note = await readNoteFile(resolveNoteFilePath(baseDir, notebookId, filename), notebookId);
     if (note.deletedAt && notebookId === TRASH_NOTEBOOK_ID) {
       return;
     }
@@ -1158,7 +1170,10 @@ export async function moveNote(
     throw new AppError('NOT_FOUND', `Note "${noteId}" was not found.`);
   }
 
-  const note = await readNoteFile(path.join(baseDir, fromNotebookId, filename), fromNotebookId);
+  const note = await readNoteFile(
+    resolveNoteFilePath(baseDir, fromNotebookId, filename),
+    fromNotebookId
+  );
 
   const moved: Note = {
     ...note,
@@ -1184,7 +1199,7 @@ export async function restoreNote(
   }
 
   const trashed = await readNoteFile(
-    path.join(baseDir, TRASH_NOTEBOOK_ID, filename),
+    resolveNoteFilePath(baseDir, TRASH_NOTEBOOK_ID, filename),
     TRASH_NOTEBOOK_ID
   );
   const destinationNotebookId =
@@ -1216,7 +1231,7 @@ export async function purgeNote(baseDir: string, noteId: string): Promise<void> 
   }
 
   try {
-    await fs.unlink(path.join(baseDir, TRASH_NOTEBOOK_ID, filename));
+    await fs.unlink(resolveNoteFilePath(baseDir, TRASH_NOTEBOOK_ID, filename));
     await removeIndexEntry(baseDir, noteId);
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to permanently delete note.', {
