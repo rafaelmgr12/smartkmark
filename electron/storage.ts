@@ -347,6 +347,51 @@ function assertSafeRelativePath(relativePath: string): void {
   }
 }
 
+function assertPathWithinRoot(rootDir: string, targetPath: string, message: string): void {
+  const resolvedRootDir = path.resolve(rootDir);
+  const resolvedTargetPath = path.resolve(targetPath);
+  const relativePath = path.relative(resolvedRootDir, resolvedTargetPath);
+
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new AppError('VALIDATION_ERROR', message);
+  }
+}
+
+async function validateExtractedTree(
+  rootDir: string,
+  currentDir = rootDir,
+  resolvedRootDir?: string
+): Promise<void> {
+  const safeRootDir = resolvedRootDir ?? (await fs.realpath(rootDir));
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(currentDir, entry.name);
+    const relativePath = path.relative(rootDir, entryPath);
+    const stats = await fs.lstat(entryPath);
+
+    assertSafeRelativePath(relativePath);
+
+    if (stats.isSymbolicLink()) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Backup archive contains symbolic links, which are not allowed.'
+      );
+    }
+
+    const realEntryPath = await fs.realpath(entryPath);
+    assertPathWithinRoot(
+      safeRootDir,
+      realEntryPath,
+      'Backup archive contains content outside the extraction directory.'
+    );
+
+    if (stats.isDirectory()) {
+      await validateExtractedTree(rootDir, entryPath, safeRootDir);
+    }
+  }
+}
+
 async function validateWorkspaceStructure(candidateDir: string): Promise<void> {
   const entries = await fs.readdir(candidateDir, { withFileTypes: true });
   const notebookDirs = entries.filter((entry) => entry.isDirectory());
@@ -382,6 +427,8 @@ async function validateWorkspaceStructure(candidateDir: string): Promise<void> {
 }
 
 async function resolveExtractedWorkspaceDir(extractRoot: string): Promise<string> {
+  await validateExtractedTree(extractRoot);
+
   const rootEntries = await fs.readdir(extractRoot, { withFileTypes: true });
   const candidate =
     rootEntries.length === 1 && rootEntries[0]?.isDirectory()
