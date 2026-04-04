@@ -469,22 +469,31 @@ async function ensureNotebookExists(
   baseDir: string,
   notebookId: string
 ): Promise<void> {
-  const notebookPath = path.join(baseDir, notebookId);
+  const notebookPath = resolveNotebookPath(baseDir, notebookId);
   if (!(await pathExists(notebookPath))) {
     throw new AppError('NOT_FOUND', `Notebook "${notebookId}" was not found.`);
   }
 }
 
+function resolveNotebookPath(baseDir: string, notebookId: string): string {
+  const safeNotebookId = assertSafePathSegment(notebookId, 'Notebook ID');
+  return resolvePathWithinBaseDir(baseDir, safeNotebookId);
+}
+
 function trashNotebookPath(baseDir: string): string {
-  return path.join(baseDir, TRASH_NOTEBOOK_ID);
+  return resolveNotebookPath(baseDir, TRASH_NOTEBOOK_ID);
 }
 
 function trashedNotebookRecordsPath(baseDir: string): string {
-  return path.join(trashNotebookPath(baseDir), TRASH_NOTEBOOKS_DIR);
+  return resolvePathWithinBaseDir(trashNotebookPath(baseDir), TRASH_NOTEBOOKS_DIR);
 }
 
 function trashedNotebookRecordPath(baseDir: string, notebookId: string): string {
-  return path.join(trashedNotebookRecordsPath(baseDir), `${notebookId}.json`);
+  const safeNotebookId = assertSafePathSegment(notebookId, 'Notebook ID');
+  return resolvePathWithinBaseDir(
+    trashedNotebookRecordsPath(baseDir),
+    `${safeNotebookId}.json`
+  );
 }
 
 async function writeDeletedNotebookRecord(
@@ -586,7 +595,7 @@ export async function createNotebook(
   name: string
 ): Promise<Notebook> {
   const notebookName = sanitizeNotebookName(name);
-  const notebookPath = path.join(baseDir, notebookName);
+  const notebookPath = resolveNotebookPath(baseDir, notebookName);
 
   if (await pathExists(notebookPath)) {
     throw new AppError(
@@ -612,8 +621,8 @@ export async function renameNotebook(
   newName: string
 ): Promise<Notebook> {
   const nextName = sanitizeNotebookName(newName);
-  const currentPath = path.join(baseDir, id);
-  const nextPath = path.join(baseDir, nextName);
+  const currentPath = resolveNotebookPath(baseDir, id);
+  const nextPath = resolveNotebookPath(baseDir, nextName);
 
   if (id === TRASH_NOTEBOOK_ID) {
     throw new AppError('VALIDATION_ERROR', 'The trash notebook cannot be renamed.');
@@ -649,7 +658,7 @@ export async function deleteNotebook(
   baseDir: string,
   id: string
 ): Promise<void> {
-  const notebookPath = path.join(baseDir, id);
+  const notebookPath = resolveNotebookPath(baseDir, id);
   const deletedAt = new Date().toISOString();
 
   if (!(await pathExists(notebookPath))) {
@@ -680,7 +689,7 @@ export async function deleteNotebook(
     await fs.rm(notebookPath, { recursive: true, force: true });
     const notebooks = await listNotebooks(baseDir);
     if (notebooks.length === 0) {
-      await fs.mkdir(path.join(baseDir, 'Inbox'), { recursive: true });
+      await fs.mkdir(resolveNotebookPath(baseDir, 'Inbox'), { recursive: true });
     }
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to delete notebook.', {
@@ -1185,7 +1194,7 @@ export async function restoreNote(
     throw new AppError('VALIDATION_ERROR', 'A trashed note must be restored elsewhere.');
   }
 
-  await fs.mkdir(path.join(baseDir, destinationNotebookId), { recursive: true });
+  await fs.mkdir(resolveNotebookPath(baseDir, destinationNotebookId), { recursive: true });
 
   const restored = await moveStoredNote(baseDir, TRASH_NOTEBOOK_ID, filename, {
     ...trashed,
