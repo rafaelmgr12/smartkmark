@@ -69,6 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const SETTINGS_FILE = 'settings.json';
 const NOTE_INDEX_FILE = '.index.json';
 const NOTEBOOK_NAME_PATTERN = /[<>:"/\\|?*]/g;
+const PATH_SEPARATOR_PATTERN = /[\\/]/;
 export const TRASH_NOTEBOOK_ID = '.trash';
 const TRASH_NOTEBOOKS_DIR = '.notebooks';
 const DEFAULT_TRASH_RETENTION_DAYS = 30;
@@ -159,6 +160,39 @@ export function slugify(text: string): string {
     .toLowerCase()
     .replace(/[\s_-]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+export function assertSafePathSegment(value: string, label: string): string {
+  if (value.trim().length === 0) {
+    throw new AppError('VALIDATION_ERROR', `${label} must be a non-empty string.`);
+  }
+
+  if (value === '.' || value === '..' || value.includes('..')) {
+    throw new AppError('VALIDATION_ERROR', `${label} contains invalid path traversal characters.`);
+  }
+
+  if (path.isAbsolute(value) || PATH_SEPARATOR_PATTERN.test(value)) {
+    throw new AppError('VALIDATION_ERROR', `${label} must not contain path separators.`);
+  }
+
+  return value;
+}
+
+export function resolvePathWithinBaseDir(baseDir: string, ...segments: string[]): string {
+  const resolvedBaseDir = path.resolve(baseDir);
+  const resolvedPath = path.resolve(resolvedBaseDir, ...segments);
+  const relativePath = path.relative(resolvedBaseDir, resolvedPath);
+  const escapesBaseDir =
+    relativePath.startsWith('..') || path.isAbsolute(relativePath);
+
+  if (escapesBaseDir) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'Resolved path escapes the SmartKMark data directory.'
+    );
+  }
+
+  return resolvedPath;
 }
 
 export function sanitizeNotebookName(value: string): string {
