@@ -54,6 +54,7 @@ const NOTES_UPDATE_KEYS = [
   'pinned',
   'status',
 ] as const;
+const PATH_SEPARATOR_PATTERN = /[\\/]/;
 
 type Schema<T> = {
   parse: (input: unknown) => T;
@@ -161,6 +162,30 @@ const nonEmptyStringSchema: Schema<string> = {
     }
 
     return input;
+  },
+};
+
+function parseSafeId(input: unknown, label: string): string {
+  if (typeof input !== 'string' || input.trim().length === 0) {
+    schemaError(`${label} must be a non-empty string.`);
+  }
+
+  if (path.isAbsolute(input) || PATH_SEPARATOR_PATTERN.test(input) || input.includes('..')) {
+    schemaError(`${label} contains invalid path characters.`);
+  }
+
+  return input;
+}
+
+const safeNotebookIdSchema: Schema<string> = {
+  parse(input) {
+    return parseSafeId(input, 'Notebook ID');
+  },
+};
+
+const safeNoteIdSchema: Schema<string> = {
+  parse(input) {
+    return parseSafeId(input, 'Note ID');
   },
 };
 
@@ -332,9 +357,7 @@ const notesCreateSchema: Schema<{
     const value = parseObjectRecord(input, 'Expected notes:create payload object.');
     assertOnlyAllowedKeys(value, NOTES_CREATE_KEYS, () => 'Unexpected fields in notes:create payload.');
 
-    if (typeof value.notebookId !== 'string' || value.notebookId.trim().length === 0) {
-      schemaError('notes:create notebookId must be a non-empty string.');
-    }
+    const notebookId = safeNotebookIdSchema.parse(value.notebookId);
 
     if (typeof value.title !== 'string' || value.title.trim().length === 0) {
       schemaError('notes:create title must be a non-empty string.');
@@ -345,7 +368,7 @@ const notesCreateSchema: Schema<{
     }
 
     return {
-      notebookId: value.notebookId,
+      notebookId,
       title: value.title,
       ...(value.body !== undefined ? { body: value.body } : {}),
     };
@@ -369,13 +392,8 @@ const notesUpdateSchema: Schema<{
       (key) => `Unexpected fields in notes:update payload: ${key}.`
     );
 
-    if (typeof value.id !== 'string' || value.id.trim().length === 0) {
-      schemaError('notes:update id must be a non-empty string.');
-    }
-
-    if (typeof value.notebookId !== 'string' || value.notebookId.trim().length === 0) {
-      schemaError('notes:update notebookId must be a non-empty string.');
-    }
+    const id = safeNoteIdSchema.parse(value.id);
+    const notebookId = safeNotebookIdSchema.parse(value.notebookId);
 
     if (value.title !== undefined && typeof value.title !== 'string') {
       schemaError('notes:update title must be a string when provided.');
@@ -402,8 +420,8 @@ const notesUpdateSchema: Schema<{
     }
 
     return {
-      id: value.id,
-      notebookId: value.notebookId,
+      id,
+      notebookId,
       ...(value.title !== undefined ? { title: value.title } : {}),
       ...(value.body !== undefined ? { body: value.body } : {}),
       ...(value.tags !== undefined ? { tags: value.tags as NoteTag[] } : {}),
@@ -420,13 +438,13 @@ const notesRestoreSchema: Schema<[string, string | undefined]> = {
     }
 
     const [noteId, notebookId] = input;
-    const parsedNoteId = nonEmptyStringSchema.parse(noteId);
+    const parsedNoteId = safeNoteIdSchema.parse(noteId);
 
-    if (notebookId !== undefined && typeof notebookId !== 'string') {
-      schemaError('notes:restore notebookId must be a string when provided.');
+    if (notebookId !== undefined) {
+      return [parsedNoteId, safeNotebookIdSchema.parse(notebookId)];
     }
 
-    return [parsedNoteId, notebookId?.trim() || undefined];
+    return [parsedNoteId, undefined];
   },
 };
 
@@ -503,10 +521,10 @@ function registerNotebookHandlers() {
   );
   registerValidatedHandler(
     'notebooks:rename',
-    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    tupleSchema(safeNotebookIdSchema, nonEmptyStringSchema),
     async ([id, newName]) => renameNotebook(dataDir(), id, newName)
   );
-  registerValidatedHandler('notebooks:delete', tupleSchema(nonEmptyStringSchema), async ([id]) =>
+  registerValidatedHandler('notebooks:delete', tupleSchema(safeNotebookIdSchema), async ([id]) =>
     deleteNotebook(dataDir(), id)
   );
 }
@@ -518,7 +536,7 @@ function registerNoteHandlers() {
   );
   registerValidatedHandler(
     'notes:get',
-    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    tupleSchema(safeNotebookIdSchema, safeNoteIdSchema),
     async ([notebookId, noteId]) => getNote(dataDir(), notebookId, noteId)
   );
   registerValidatedHandler('notes:create', tupleSchema(notesCreateSchema), async ([payload]) =>
@@ -529,18 +547,18 @@ function registerNoteHandlers() {
   );
   registerValidatedHandler(
     'notes:delete',
-    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema),
+    tupleSchema(safeNotebookIdSchema, safeNoteIdSchema),
     async ([notebookId, noteId]) => deleteNote(dataDir(), notebookId, noteId)
   );
   registerValidatedHandler('notes:restore', notesRestoreSchema, async ([noteId, notebookId]) =>
     restoreNote(dataDir(), noteId, notebookId)
   );
-  registerValidatedHandler('notes:purge', tupleSchema(nonEmptyStringSchema), async ([noteId]) =>
+  registerValidatedHandler('notes:purge', tupleSchema(safeNoteIdSchema), async ([noteId]) =>
     purgeNote(dataDir(), noteId)
   );
   registerValidatedHandler(
     'notes:move',
-    tupleSchema(nonEmptyStringSchema, nonEmptyStringSchema, nonEmptyStringSchema),
+    tupleSchema(safeNoteIdSchema, safeNotebookIdSchema, safeNotebookIdSchema),
     async ([noteId, fromNotebookId, toNotebookId]) =>
       moveNote(dataDir(), noteId, fromNotebookId, toNotebookId)
   );
