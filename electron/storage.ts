@@ -333,6 +333,24 @@ async function unzipArchive(sourceZipPath: string, destinationDir: string): Prom
   }
 }
 
+async function validateArchiveEntries(sourceZipPath: string): Promise<void> {
+  try {
+    const { stdout } = await execFileAsync('zipinfo', ['-1', sourceZipPath]);
+    const entries = stdout
+      .split('\n')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    for (const entry of entries) {
+      assertSafeRelativePath(entry);
+    }
+  } catch (error) {
+    throw new AppError('READ_ERROR', 'Unable to inspect backup zip file.', {
+      details: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
 function assertSafeRelativePath(relativePath: string): void {
   const normalized = relativePath.replace(/\\/g, '/');
   if (
@@ -494,6 +512,7 @@ export async function importWorkspaceBackup(
   await fs.mkdir(extractedDir, { recursive: true });
 
   try {
+    await validateArchiveEntries(path.resolve(sourceZipPath));
     await unzipArchive(path.resolve(sourceZipPath), extractedDir);
     const workspaceDir = await resolveExtractedWorkspaceDir(extractedDir);
     await copyValidatedWorkspaceTree(workspaceDir, stagedDir);
