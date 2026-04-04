@@ -10,6 +10,7 @@ export async function installDesktopApiFixture(
 
   await page.addInitScript(
     ({ seed: initialSeed }) => {
+      const TRASH_NOTEBOOK_ID = '.trash';
       const clone = <T,>(value: T): T => structuredClone(value);
       const sortNotes = <T extends { updatedAt: string }>(notes: T[]) =>
         [...notes].sort(
@@ -81,6 +82,8 @@ export async function installDesktopApiFixture(
         return candidate;
       };
 
+      const nextTimestamp = () => new Date().toISOString();
+
       Object.defineProperty(window, 'desktopApi', {
         configurable: true,
         value: {
@@ -116,17 +119,36 @@ export async function installDesktopApiFixture(
             return clone(notebook);
           },
           deleteNotebook: async (id: string) => {
-            write(
-              STORAGE_KEYS.notebooks,
-              readNotebooks().filter((notebook) => notebook.id !== id)
+            const notebooks = readNotebooks().filter((notebook) => notebook.id !== id);
+            const timestamp = nextTimestamp();
+            const notes = readNotes().map((note) =>
+              note.notebookId === id
+                ? {
+                    ...note,
+                    notebookId: TRASH_NOTEBOOK_ID,
+                    deletedAt: timestamp,
+                    trashedFromNotebookId: id,
+                    updatedAt: timestamp,
+                  }
+                : note
             );
-            write(
-              STORAGE_KEYS.notes,
-              readNotes().filter((note) => note.notebookId !== id)
-            );
+            write(STORAGE_KEYS.notebooks, notebooks);
+            write(STORAGE_KEYS.notes, notes);
           },
           listNotes: async () =>
-            sortNotes(readNotes().map((note) => toMeta(note))).map((note) =>
+            sortNotes(
+              readNotes()
+                .filter((note) => !note.deletedAt)
+                .map((note) => toMeta(note))
+            ).map((note) =>
+              clone(note)
+            ),
+          listTrashNotes: async () =>
+            sortNotes(
+              readNotes()
+                .filter((note) => note.deletedAt)
+                .map((note) => toMeta(note))
+            ).map((note) =>
               clone(note)
             ),
           getNote: async (_notebookId: string, noteId: string) => {
@@ -143,7 +165,7 @@ export async function installDesktopApiFixture(
             body?: string;
           }) => {
             const notes = readNotes();
-            const timestamp = new Date().toISOString();
+            const timestamp = nextTimestamp();
             const note: Note = {
               id: `note-${notes.length + 1}`,
               title: payload.title.trim() || 'Untitled',
@@ -179,11 +201,48 @@ export async function installDesktopApiFixture(
             note.tags = clone(payload.tags ?? note.tags);
             note.pinned = payload.pinned ?? note.pinned;
             note.status = payload.status ?? note.status;
-            note.updatedAt = new Date().toISOString();
+            note.updatedAt = nextTimestamp();
             write(STORAGE_KEYS.notes, notes);
             return clone(note);
           },
           deleteNote: async (_notebookId: string, noteId: string) => {
+            const timestamp = nextTimestamp();
+            const notes = readNotes().map((note) =>
+              note.id === noteId
+                ? {
+                    ...note,
+                    notebookId: TRASH_NOTEBOOK_ID,
+                    deletedAt: timestamp,
+                    trashedFromNotebookId: note.trashedFromNotebookId ?? note.notebookId,
+                    updatedAt: timestamp,
+                  }
+                : note
+            );
+            write(STORAGE_KEYS.notes, notes);
+          },
+          restoreNote: async (noteId: string, notebookId?: string) => {
+            const notes = readNotes();
+            const notebooks = readNotebooks();
+            const note = notes.find((entry) => entry.id === noteId);
+            if (!note) {
+              throw new Error('Note not found');
+            }
+
+            const destination = notebookId ?? note.trashedFromNotebookId ?? 'Inbox';
+            if (!notebooks.some((entry) => entry.id === destination)) {
+              notebooks.push({ id: destination, name: destination });
+              notebooks.sort((left, right) => left.name.localeCompare(right.name));
+              write(STORAGE_KEYS.notebooks, notebooks);
+            }
+
+            note.notebookId = destination;
+            note.deletedAt = undefined;
+            note.trashedFromNotebookId = undefined;
+            note.updatedAt = nextTimestamp();
+            write(STORAGE_KEYS.notes, notes);
+            return clone(note);
+          },
+          purgeNote: async (noteId: string) => {
             write(
               STORAGE_KEYS.notes,
               readNotes().filter((note) => note.id !== noteId)
@@ -203,7 +262,7 @@ export async function installDesktopApiFixture(
             }
 
             note.notebookId = toNotebookId;
-            note.updatedAt = new Date().toISOString();
+            note.updatedAt = nextTimestamp();
             write(STORAGE_KEYS.notes, notes);
             return clone(note);
           },
@@ -214,6 +273,16 @@ export async function installDesktopApiFixture(
             write(STORAGE_KEYS.settings, settings);
             return clone(settings);
           },
+          exportBackup: async () => ({
+            canceled: false,
+            filePath: '/tmp/smartkmark-export.zip',
+          }),
+          importBackup: async () => ({
+            canceled: false,
+          }),
+          createIncrementalBackup: async () => ({
+            filePath: '/tmp/smartkmark-backup-20260101-000000.zip',
+          }),
         },
       });
     },

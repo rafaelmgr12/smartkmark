@@ -315,6 +315,8 @@ function App() {
               note={activeFilter === 'trash' ? null : activeNote}
               notebooks={notebooks}
               settings={settings}
+              onDeleteNote={deleteNote}
+              onTogglePin={togglePin}
               onUpdateNote={updateNote}
               onMoveNote={moveNote}
               onPatchSettings={patchSettings}

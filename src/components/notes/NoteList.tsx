@@ -99,7 +99,8 @@ export default function NoteList({
                     background: 'var(--action-bg)',
                     color: note.pinned ? 'var(--warning)' : 'var(--text-3)',
                   }}
-                  title={note.pinned ? 'Unpin' : 'Pin'}
+                  aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+                  title={note.pinned ? 'Unpin note' : 'Pin note'}
                 >
                   <Pin size={12} />
                 </button>

@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CheckCircle2, LoaderCircle, TriangleAlert } from 'lucide-react';
+import {
+  CheckCircle2,
+  LoaderCircle,
+  Pin,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react';
 import TagBar from './TagBar';
 import NoteMetaBar from './NoteMetaBar';
 import EditorToolbar from './EditorToolbar';
@@ -32,6 +38,8 @@ interface NoteEditorProps {
   note: Note | null;
   notebooks: Notebook[];
   settings: AppSettings;
+  onDeleteNote: (notebookId: string, noteId: string) => Promise<void>;
+  onTogglePin: (noteId: string) => Promise<void> | void;
   onUpdateNote: (payload: UpdateNotePayload) => Promise<Note | null>;
   onMoveNote: (
     noteId: string,
@@ -89,6 +97,8 @@ export default function NoteEditor({
   note,
   notebooks,
   settings,
+  onDeleteNote,
+  onTogglePin,
   onUpdateNote,
   onMoveNote,
   onPatchSettings,
@@ -375,6 +385,27 @@ export default function NoteEditor({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="ghost-button px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+            onClick={() => void onTogglePin(note.id)}
+          >
+            <Pin size={14} />
+            {note.pinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            type="button"
+            className="ghost-button px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+            style={{ color: 'var(--danger)' }}
+            onClick={() => {
+              if (window.confirm(`Move note "${note.title}" to Trash?`)) {
+                void onDeleteNote(note.notebookId, note.id);
+              }
+            }}
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
           <span className="status-pill" data-tone={saveTone}>
             {saveStatus === 'saving' ? (
               <LoaderCircle size={12} className="animate-spin" />
