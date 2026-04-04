@@ -41,7 +41,9 @@
     "rehype-slug": "^6.0.0",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "yauzl": "^3.3.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.0",
