@@ -1,8 +1,8 @@
+import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { pipeline } from 'node:stream/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AppError,
@@ -20,8 +20,14 @@ import {
   purgeNote,
   restoreNote,
 } from './storage';
-
-const execFileAsync = promisify(execFile);
+const yazl = require('yazl') as {
+  ZipFile: new () => {
+    addBuffer: (buffer: Buffer, metadataPath: string, options?: { mode?: number }) => void;
+    addEmptyDirectory: (metadataPath: string, options?: { mode?: number }) => void;
+    end: (options?: unknown, callback?: () => void) => void;
+    outputStream: NodeJS.ReadableStream;
+  };
+};
 const tempDirs: string[] = [];
 
 async function createTempDir(prefix: string): Promise<string> {
@@ -35,6 +41,19 @@ afterEach(async () => {
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))
   );
 });
+
+async function writeZipArchive(
+  targetPath: string,
+  build: (zipFile: InstanceType<typeof yazl.ZipFile>) => void
+): Promise<void> {
+  const zipFile = new yazl.ZipFile();
+  const outputStream = createWriteStream(targetPath);
+  const writePromise = pipeline(zipFile.outputStream, outputStream);
+
+  build(zipFile);
+  zipFile.end();
+  await writePromise;
+}
 
 describe('workspace backups', () => {
   it('exports and imports workspace zip successfully', async () => {
@@ -82,11 +101,10 @@ describe('workspace backups', () => {
       body: 'do not lose',
     });
 
-    const invalidSource = await createTempDir('smartkmark-invalid-src-');
-    await fs.writeFile(path.join(invalidSource, 'README.txt'), 'invalid workspace');
-
     const invalidZip = path.join(await createTempDir('smartkmark-invalid-zip-'), 'invalid.zip');
-    await execFileAsync('zip', ['-r', '-q', invalidZip, '.'], { cwd: invalidSource });
+    await writeZipArchive(invalidZip, (zipFile) => {
+      zipFile.addBuffer(Buffer.from('invalid workspace', 'utf-8'), 'README.txt');
+    });
 
     await expect(importWorkspaceBackup(workspace, invalidZip)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
@@ -95,6 +113,25 @@ describe('workspace backups', () => {
     const notesAfter = await listAllNotes(workspace);
     expect(notesAfter).toHaveLength(1);
     expect(notesAfter[0]?.title).toBe('Keep me');
+  });
+
+  it('rejects archive entries that encode symbolic links', async () => {
+    const workspace = await createTempDir('smartkmark-workspace-');
+    await ensureBaseDir(workspace);
+
+    const invalidZip = path.join(await createTempDir('smartkmark-slip-zip-'), 'slip.zip');
+    await writeZipArchive(invalidZip, (zipFile) => {
+      zipFile.addBuffer(Buffer.from('owned', 'utf-8'), 'symlink-note', {
+        mode: 0o120777,
+      });
+      zipFile.addEmptyDirectory('Inbox/');
+    });
+
+    await expect(importWorkspaceBackup(workspace, invalidZip)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    } satisfies Partial<AppError>);
+
+    await expect(fs.access(path.join(workspace, 'symlink-note'))).rejects.toBeTruthy();
   });
 });
 

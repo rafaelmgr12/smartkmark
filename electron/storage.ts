@@ -1,9 +1,9 @@
+import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 export interface Notebook {
   id: string;
@@ -73,7 +73,16 @@ const PATH_SEPARATOR_PATTERN = /[\\/]/;
 export const TRASH_NOTEBOOK_ID = '.trash';
 const TRASH_NOTEBOOKS_DIR = '.notebooks';
 const DEFAULT_TRASH_RETENTION_DAYS = 30;
-const execFileAsync = promisify(execFile);
+const yauzl = require('yauzl') as {
+  open: (
+    path: string,
+    options: { lazyEntries: boolean; decodeStrings: boolean },
+    callback: (error: Error | null, zipFile?: YauzlZipFile) => void
+  ) => void;
+};
+const yazl = require('yazl') as {
+  ZipFile: new () => YazlZipFile;
+};
 
 interface NoteIndexEntry {
   notebookId: string;
@@ -89,6 +98,42 @@ interface DeletedNotebookRecord {
   id: string;
   name: string;
   deletedAt: string;
+}
+
+interface YauzlEntry {
+  externalFileAttributes: number;
+  fileName: string;
+}
+
+interface YauzlZipFile {
+  close(): void;
+  on(event: 'close' | 'end', listener: () => void): YauzlZipFile;
+  on(event: 'entry', listener: (entry: YauzlEntry) => void): YauzlZipFile;
+  on(event: 'error', listener: (error: Error) => void): YauzlZipFile;
+  openReadStream(
+    entry: YauzlEntry,
+    callback: (error: Error | null, stream?: NodeJS.ReadableStream) => void
+  ): void;
+  readEntry(): void;
+}
+
+interface YazlZipFile {
+  addBuffer: (
+    buffer: Buffer,
+    metadataPath: string,
+    options?: { mode?: number; mtime?: Date }
+  ) => void;
+  addEmptyDirectory: (
+    metadataPath: string,
+    options?: { mode?: number; mtime?: Date }
+  ) => void;
+  addFile: (
+    realPath: string,
+    metadataPath: string,
+    options?: { mode?: number; mtime?: Date }
+  ) => void;
+  end: (options?: unknown, callback?: () => void) => void;
+  outputStream: NodeJS.ReadableStream;
 }
 
 export class AppError extends Error {
@@ -313,9 +358,13 @@ async function zipDirectory(sourceDir: string, targetZipPath: string): Promise<v
   await fs.mkdir(path.dirname(targetZipPath), { recursive: true });
 
   try {
-    await execFileAsync('zip', ['-r', '-q', targetZipPath, '.'], {
-      cwd: sourceDir,
-    });
+    const zipFile = new yazl.ZipFile();
+    const outputStream = createWriteStream(targetZipPath);
+    const writePromise = pipeline(zipFile.outputStream, outputStream);
+
+    await addDirectoryToZip(zipFile, sourceDir, sourceDir);
+    zipFile.end();
+    await writePromise;
   } catch (error) {
     throw new AppError('WRITE_ERROR', 'Unable to export workspace backup zip.', {
       details: error instanceof Error ? error.message : undefined,
@@ -323,9 +372,154 @@ async function zipDirectory(sourceDir: string, targetZipPath: string): Promise<v
   }
 }
 
-async function unzipArchive(sourceZipPath: string, destinationDir: string): Promise<void> {
+async function addDirectoryToZip(
+  zipFile: YazlZipFile,
+  currentDir: string,
+  rootDir: string
+): Promise<void> {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  const normalizedDirPath = path.relative(rootDir, currentDir).replace(/\\/g, '/');
+
+  if (normalizedDirPath) {
+    zipFile.addEmptyDirectory(normalizedDirPath);
+  }
+
+  for (const entry of entries) {
+    const sourcePath = path.join(currentDir, entry.name);
+    const metadataPath = path.relative(rootDir, sourcePath).replace(/\\/g, '/');
+    const stats = await fs.lstat(sourcePath);
+
+    if (stats.isSymbolicLink()) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Workspace contains unsupported symbolic link: "${metadataPath}".`
+      );
+    }
+
+    if (stats.isDirectory()) {
+      await addDirectoryToZip(zipFile, sourcePath, rootDir);
+      continue;
+    }
+
+    if (!stats.isFile()) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Workspace contains unsupported entry: "${metadataPath}".`
+      );
+    }
+
+    zipFile.addFile(sourcePath, metadataPath);
+  }
+}
+
+function openZipFile(sourceZipPath: string): Promise<YauzlZipFile> {
+  return new Promise((resolve, reject) => {
+    yauzl.open(
+      sourceZipPath,
+      { lazyEntries: true, decodeStrings: true },
+      (error, zipFile) => {
+        if (error || !zipFile) {
+          reject(error ?? new Error('Unable to open zip file.'));
+          return;
+        }
+
+        resolve(zipFile);
+      }
+    );
+  });
+}
+
+function isDirectoryArchiveEntry(entry: YauzlEntry): boolean {
+  return entry.fileName.endsWith('/');
+}
+
+function isSymbolicLinkArchiveEntry(entry: YauzlEntry): boolean {
+  const fileType = (entry.externalFileAttributes >>> 16) & 0o170000;
+  return fileType === 0o120000;
+}
+
+function openArchiveReadStream(
+  zipFile: YauzlZipFile,
+  entry: YauzlEntry
+): Promise<NodeJS.ReadableStream> {
+  return new Promise((resolve, reject) => {
+    zipFile.openReadStream(entry, (error, stream) => {
+      if (error || !stream) {
+        reject(error ?? new Error('Unable to read archive entry.'));
+        return;
+      }
+
+      resolve(stream);
+    });
+  });
+}
+
+async function forEachArchiveEntry(
+  sourceZipPath: string,
+  onEntry: (entry: YauzlEntry, zipFile: YauzlZipFile) => Promise<void>
+): Promise<void> {
+  const zipFile = await openZipFile(sourceZipPath);
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const fail = (error: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      zipFile.close();
+      reject(error);
+    };
+
+    zipFile.on('error', fail);
+    zipFile.on('end', () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve();
+    });
+    zipFile.on('entry', (entry) => {
+      void onEntry(entry, zipFile)
+        .then(() => {
+          zipFile.readEntry();
+        })
+        .catch((error: unknown) => {
+          fail(error instanceof Error ? error : new Error('Unable to process archive entry.'));
+        });
+    });
+
+    zipFile.readEntry();
+  }).finally(() => {
+    zipFile.close();
+  });
+}
+
+async function extractArchive(sourceZipPath: string, destinationDir: string): Promise<void> {
   try {
-    await execFileAsync('unzip', ['-q', sourceZipPath, '-d', destinationDir]);
+    await forEachArchiveEntry(sourceZipPath, async (entry, zipFile) => {
+      assertSafeRelativePath(entry.fileName);
+
+      if (isSymbolicLinkArchiveEntry(entry)) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          'Backup archive contains symbolic links, which are not allowed.'
+        );
+      }
+
+      const targetPath = resolvePathWithinBaseDir(destinationDir, entry.fileName);
+      if (isDirectoryArchiveEntry(entry)) {
+        await fs.mkdir(targetPath, { recursive: true });
+        return;
+      }
+
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
+      const readStream = await openArchiveReadStream(zipFile, entry);
+      await pipeline(readStream, createWriteStream(targetPath));
+    });
   } catch (error) {
     throw new AppError('READ_ERROR', 'Unable to read backup zip file.', {
       details: error instanceof Error ? error.message : undefined,
@@ -335,16 +529,21 @@ async function unzipArchive(sourceZipPath: string, destinationDir: string): Prom
 
 async function validateArchiveEntries(sourceZipPath: string): Promise<void> {
   try {
-    const { stdout } = await execFileAsync('zipinfo', ['-1', sourceZipPath]);
-    const entries = stdout
-      .split('\n')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
+    await forEachArchiveEntry(sourceZipPath, async (entry) => {
+      assertSafeRelativePath(entry.fileName);
 
-    for (const entry of entries) {
-      assertSafeRelativePath(entry);
-    }
+      if (isSymbolicLinkArchiveEntry(entry)) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          'Backup archive contains symbolic links, which are not allowed.'
+        );
+      }
+    });
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
     throw new AppError('READ_ERROR', 'Unable to inspect backup zip file.', {
       details: error instanceof Error ? error.message : undefined,
     });
@@ -512,8 +711,9 @@ export async function importWorkspaceBackup(
   await fs.mkdir(extractedDir, { recursive: true });
 
   try {
-    await validateArchiveEntries(path.resolve(sourceZipPath));
-    await unzipArchive(path.resolve(sourceZipPath), extractedDir);
+    const resolvedSourceZipPath = path.resolve(sourceZipPath);
+    await validateArchiveEntries(resolvedSourceZipPath);
+    await extractArchive(resolvedSourceZipPath, extractedDir);
     const workspaceDir = await resolveExtractedWorkspaceDir(extractedDir);
     await copyValidatedWorkspaceTree(workspaceDir, stagedDir);
     await ensureBaseDir(stagedDir);
