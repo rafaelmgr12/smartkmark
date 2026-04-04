@@ -8,6 +8,7 @@ import {
   Link,
   List,
   ListOrdered,
+  Maximize,
   Minus,
   Quote,
   Sigma,
@@ -23,6 +24,7 @@ interface EditorToolbarProps {
   fontSize: EditorFontSize;
   lineWrap: LineWrapMode;
   onTogglePreview: () => void;
+  onToggleFullscreenPreview: () => void;
   onCommand: (command: EditorCommand) => void;
   onFontSizeChange: (value: EditorFontSize) => void;
   onLineWrapChange: (value: LineWrapMode) => void;
@@ -33,6 +35,7 @@ export default function EditorToolbar({
   fontSize,
   lineWrap,
   onTogglePreview,
+  onToggleFullscreenPreview,
   onCommand,
   onFontSizeChange,
   onLineWrapChange,
@@ -158,6 +161,11 @@ export default function EditorToolbar({
         title={isPreviewOpen ? 'Hide preview (Ctrl+E)' : 'Show preview (Ctrl+E)'}
         active={isPreviewOpen}
         onClick={onTogglePreview}
+      />
+      <IconButton
+        icon={Maximize}
+        title="Fullscreen preview (Ctrl+Shift+E)"
+        onClick={onToggleFullscreenPreview}
       />
     </div>
   );

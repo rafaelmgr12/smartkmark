@@ -13,6 +13,7 @@ import {
   Pin,
   Trash2,
   TriangleAlert,
+  X,
 } from 'lucide-react';
 import TagBar from './TagBar';
 import NoteMetaBar from './NoteMetaBar';
@@ -112,6 +113,7 @@ export default function NoteEditor({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
 
   const notebook = useMemo(
     () => notebooks.find((item) => item.id === note?.notebookId),
@@ -239,6 +241,12 @@ export default function NoteEditor({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isFullscreenPreview) {
+        event.preventDefault();
+        setIsFullscreenPreview(false);
+        return;
+      }
+
       if (!(event.ctrlKey || event.metaKey)) {
         return;
       }
@@ -249,6 +257,12 @@ export default function NoteEditor({
         void saveNow();
       }
 
+      if (key === 'e' && event.shiftKey) {
+        event.preventDefault();
+        setIsFullscreenPreview((prev) => !prev);
+        return;
+      }
+
       if (key === 'e') {
         event.preventDefault();
         void onPatchSettings({ previewOpen: !settings.previewOpen });
@@ -257,7 +271,7 @@ export default function NoteEditor({
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onPatchSettings, saveNow, settings.previewOpen]);
+  }, [isFullscreenPreview, onPatchSettings, saveNow, settings.previewOpen]);
 
   const handleBodyChange = useCallback(
     (nextBody: string) => {
@@ -439,6 +453,7 @@ export default function NoteEditor({
         onTogglePreview={() =>
           void onPatchSettings({ previewOpen: !settings.previewOpen })
         }
+        onToggleFullscreenPreview={() => setIsFullscreenPreview((prev) => !prev)}
         onFontSizeChange={(value) =>
           void onPatchSettings({ editorFontSize: value })
         }
@@ -487,6 +502,38 @@ export default function NoteEditor({
           </div>
         ) : null}
       </div>
+
+      {isFullscreenPreview ? (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--bg-app)' }}>
+          <div
+            className="flex items-center justify-between border-b px-6 py-3"
+            style={{ borderColor: 'var(--border-subtle)' }}
+          >
+            <p className="text-sm font-semibold text-[var(--text-1)]">
+              {title || 'Untitled'}
+            </p>
+            <button
+              type="button"
+              className="ghost-button flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
+              onClick={() => setIsFullscreenPreview(false)}
+            >
+              <X size={14} />
+              Close
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-[var(--text-2)]">
+                  Preparing preview...
+                </div>
+              }
+            >
+              <NoteContent content={body} />
+            </Suspense>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
