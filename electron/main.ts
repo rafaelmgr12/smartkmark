@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +32,7 @@ import {
   type NoteStatus,
   type NoteTag,
 } from './storage';
+import { pathToFileURL } from 'node:url';
 
 const isDev = !app.isPackaged;
 const execFileAsync = promisify(execFile);
@@ -42,6 +43,42 @@ type Schema<T> = {
 
 function schemaError(message: string): never {
   throw new AppError('VALIDATION_ERROR', message);
+}
+
+function isSafeExternalUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+
+    if (url.protocol === 'https:') {
+      return true;
+    }
+
+    if (url.protocol === 'mailto:') {
+      return true;
+    }
+
+    if (isDev && url.protocol === 'http:' && url.hostname === 'localhost') {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedAppUrl(rawUrl: string, appUrl: URL): boolean {
+  try {
+    const url = new URL(rawUrl);
+
+    if (isDev) {
+      return url.origin === appUrl.origin;
+    }
+
+    return url.protocol === 'file:' && url.pathname === appUrl.pathname;
+  } catch {
+    return false;
+  }
 }
 
 const nonEmptyStringSchema: Schema<string> = {
@@ -374,13 +411,37 @@ async function createWindow(): Promise<void> {
     },
   });
 
+  const appUrl = isDev
+    ? new URL('http://localhost:5173')
+    : pathToFileURL(path.join(__dirname, '../dist/index.html'));
+
+  window.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedAppUrl(url, appUrl)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+  });
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+
+    return { action: 'deny' };
+  });
+
   if (isDev) {
-    await window.loadURL('http://localhost:5173');
+    await window.loadURL(appUrl.toString());
     window.webContents.openDevTools({ mode: 'detach' });
     return;
   }
 
-  await window.loadFile(path.join(__dirname, '../dist/index.html'));
+  await window.loadURL(appUrl.toString());
 }
 
 app.whenReady().then(async () => {
