@@ -380,9 +380,9 @@ export default function NoteEditor({
   }
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div
-        className="flex items-center justify-between border-b px-5 py-4"
+        className="flex shrink-0 items-center justify-between border-b px-5 py-4"
         style={{ borderColor: 'var(--border-subtle)' }}
       >
         <div>

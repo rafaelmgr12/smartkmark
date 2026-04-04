@@ -10,7 +10,7 @@ interface TagBarProps {
 export default function TagBar({ notebook, tags }: TagBarProps) {
   return (
     <div
-      className="flex flex-wrap items-center gap-2 border-b px-5 py-2"
+      className="flex shrink-0 flex-wrap items-center gap-2 border-b px-5 py-2"
       style={{ borderColor: 'var(--border-subtle)' }}
     >
       {notebook && (

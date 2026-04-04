@@ -42,11 +42,10 @@ export default function EditorToolbar({
 }: EditorToolbarProps) {
   return (
     <div
-      className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b px-4 py-2"
+      className="flex shrink-0 flex-wrap items-center gap-1 border-b px-4 py-2"
       style={{
         borderColor: 'var(--border-subtle)',
         background: 'var(--surface-1)',
-        backdropFilter: 'blur(18px)',
       }}
     >
       <IconButton

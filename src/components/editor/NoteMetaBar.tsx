@@ -54,7 +54,7 @@ export default function NoteMetaBar({
 
   return (
     <div
-      className="flex flex-wrap items-start gap-4 border-b px-5 py-3"
+      className="flex shrink-0 flex-wrap items-start gap-4 border-b px-5 py-3"
       style={{ borderColor: 'var(--border-subtle)' }}
     >
       <label className="flex min-w-[12rem] flex-col gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-dim)]">
