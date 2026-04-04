@@ -93,12 +93,18 @@ function renderEditor(overrides: Partial<ComponentProps<typeof NoteEditor>> = {}
   const onPatchSettings =
     overrides.onPatchSettings ??
     vi.fn().mockResolvedValue(createSettings({ previewOpen: false }));
+  const onDeleteNote =
+    overrides.onDeleteNote ?? vi.fn().mockResolvedValue(undefined);
+  const onTogglePin =
+    overrides.onTogglePin ?? vi.fn().mockResolvedValue(undefined);
 
   const view = render(
     <NoteEditor
       note={note}
       notebooks={[inbox, backend]}
       settings={createSettings()}
+      onDeleteNote={onDeleteNote}
+      onTogglePin={onTogglePin}
       onUpdateNote={onUpdateNote}
       onMoveNote={onMoveNote}
       onPatchSettings={onPatchSettings}
@@ -109,6 +115,8 @@ function renderEditor(overrides: Partial<ComponentProps<typeof NoteEditor>> = {}
   return {
     ...view,
     note,
+    onDeleteNote,
+    onTogglePin,
     onUpdateNote,
     onMoveNote,
     onPatchSettings,
@@ -276,6 +284,8 @@ describe('NoteEditor', () => {
         note={first}
         notebooks={[inbox, backend]}
         settings={createSettings()}
+        onDeleteNote={vi.fn().mockResolvedValue(undefined)}
+        onTogglePin={vi.fn().mockResolvedValue(undefined)}
         onUpdateNote={vi.fn().mockResolvedValue(first)}
         onMoveNote={vi.fn().mockResolvedValue(first)}
         onPatchSettings={vi.fn().mockResolvedValue(createSettings())}
@@ -291,6 +301,8 @@ describe('NoteEditor', () => {
         note={second}
         notebooks={[inbox, backend]}
         settings={createSettings()}
+        onDeleteNote={vi.fn().mockResolvedValue(undefined)}
+        onTogglePin={vi.fn().mockResolvedValue(undefined)}
         onUpdateNote={vi.fn().mockResolvedValue(second)}
         onMoveNote={vi.fn().mockResolvedValue(second)}
         onPatchSettings={vi.fn().mockResolvedValue(createSettings())}
