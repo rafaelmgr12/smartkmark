@@ -116,11 +116,11 @@
   --callout-warning-border: rgba(245, 158, 11, 0.26);
   --callout-tip-bg: rgba(236, 253, 245, 0.96);
   --callout-tip-border: rgba(16, 185, 129, 0.24);
-  --code-block-bg: rgba(248, 250, 252, 1);
-  --code-block-header-bg: rgba(241, 245, 249, 1);
-  --code-block-border: rgba(148, 163, 184, 0.22);
-  --code-copy-bg: rgba(255, 255, 255, 0.92);
-  --code-copy-border: rgba(148, 163, 184, 0.24);
+  --code-block-bg: #1e293b;
+  --code-block-header-bg: #1a2332;
+  --code-block-border: rgba(51, 65, 85, 0.4);
+  --code-copy-bg: rgba(30, 41, 59, 0.92);
+  --code-copy-border: rgba(148, 163, 184, 0.3);
   --outline-bg: rgba(255, 255, 255, 0.94);
   --nav-item-border: rgba(148, 163, 184, 0.1);
   --nav-item-hover-bg: rgba(241, 245, 249, 0.96);
@@ -652,18 +652,18 @@
     @apply flex items-center justify-between border-b px-4 py-2 text-xs uppercase tracking-[0.18em];
     border-color: var(--code-block-border);
     background: var(--code-block-header-bg);
-    color: var(--text-3);
+    color: #94a3b8;
   }
 
   .code-block__copy {
     @apply rounded-lg border px-2 py-1 text-[10px] transition;
     border-color: var(--code-copy-border);
-    color: var(--text-2);
+    color: #a6c0cf;
     background: var(--code-copy-bg);
   }
 
   .code-block__copy:hover {
-    color: var(--text-1);
+    color: #f3fbff;
     border-color: rgba(34, 211, 238, 0.32);
   }
 
@@ -676,6 +676,7 @@
   .code-block code {
     font-family: var(--font-mono);
     font-size: 0.86rem;
+    color: #e2e8f0;
   }
 
   .markdown-outline {
