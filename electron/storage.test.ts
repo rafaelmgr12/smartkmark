@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { afterEach, describe, expect, it } from 'vitest';
+import yazl, { type ZipFile as YazlZipFile } from 'yazl';
 import {
   AppError,
   createNote,
@@ -20,14 +21,6 @@ import {
   purgeNote,
   restoreNote,
 } from './storage';
-const yazl = require('yazl') as {
-  ZipFile: new () => {
-    addBuffer: (buffer: Buffer, metadataPath: string, options?: { mode?: number }) => void;
-    addEmptyDirectory: (metadataPath: string, options?: { mode?: number }) => void;
-    end: (options?: unknown, callback?: () => void) => void;
-    outputStream: NodeJS.ReadableStream;
-  };
-};
 const tempDirs: string[] = [];
 
 async function createTempDir(prefix: string): Promise<string> {
@@ -44,7 +37,7 @@ afterEach(async () => {
 
 async function writeZipArchive(
   targetPath: string,
-  build: (zipFile: InstanceType<typeof yazl.ZipFile>) => void
+  build: (zipFile: YazlZipFile) => void
 ): Promise<void> {
   const zipFile = new yazl.ZipFile();
   const outputStream = createWriteStream(targetPath);

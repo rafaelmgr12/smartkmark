@@ -4,6 +4,8 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
+import yauzl, { type Entry as YauzlEntry, type ZipFile as YauzlZipFile } from 'yauzl';
+import yazl, { type ZipFile as YazlZipFile } from 'yazl';
 
 export interface Notebook {
   id: string;
@@ -73,16 +75,6 @@ const PATH_SEPARATOR_PATTERN = /[\\/]/;
 export const TRASH_NOTEBOOK_ID = '.trash';
 const TRASH_NOTEBOOKS_DIR = '.notebooks';
 const DEFAULT_TRASH_RETENTION_DAYS = 30;
-const yauzl = require('yauzl') as {
-  open: (
-    path: string,
-    options: { lazyEntries: boolean; decodeStrings: boolean },
-    callback: (error: Error | null, zipFile?: YauzlZipFile) => void
-  ) => void;
-};
-const yazl = require('yazl') as {
-  ZipFile: new () => YazlZipFile;
-};
 
 interface NoteIndexEntry {
   notebookId: string;
@@ -98,42 +90,6 @@ interface DeletedNotebookRecord {
   id: string;
   name: string;
   deletedAt: string;
-}
-
-interface YauzlEntry {
-  externalFileAttributes: number;
-  fileName: string;
-}
-
-interface YauzlZipFile {
-  close(): void;
-  on(event: 'close' | 'end', listener: () => void): YauzlZipFile;
-  on(event: 'entry', listener: (entry: YauzlEntry) => void): YauzlZipFile;
-  on(event: 'error', listener: (error: Error) => void): YauzlZipFile;
-  openReadStream(
-    entry: YauzlEntry,
-    callback: (error: Error | null, stream?: NodeJS.ReadableStream) => void
-  ): void;
-  readEntry(): void;
-}
-
-interface YazlZipFile {
-  addBuffer: (
-    buffer: Buffer,
-    metadataPath: string,
-    options?: { mode?: number; mtime?: Date }
-  ) => void;
-  addEmptyDirectory: (
-    metadataPath: string,
-    options?: { mode?: number; mtime?: Date }
-  ) => void;
-  addFile: (
-    realPath: string,
-    metadataPath: string,
-    options?: { mode?: number; mtime?: Date }
-  ) => void;
-  end: (options?: unknown, callback?: () => void) => void;
-  outputStream: NodeJS.ReadableStream;
 }
 
 export class AppError extends Error {
