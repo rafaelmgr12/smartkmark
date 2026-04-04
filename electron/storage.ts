@@ -439,6 +439,33 @@ async function resolveExtractedWorkspaceDir(extractRoot: string): Promise<string
   return candidate;
 }
 
+async function copyValidatedWorkspaceTree(
+  sourceDir: string,
+  targetDir: string
+): Promise<void> {
+  await fs.mkdir(targetDir, { recursive: true });
+
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyValidatedWorkspaceTree(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Backup archive contains an unsupported entry: "${entry.name}".`
+      );
+    }
+
+    await fs.copyFile(sourcePath, targetPath);
+  }
+}
+
 export async function exportWorkspaceBackup(
   baseDir: string,
   targetZipPath: string
@@ -469,7 +496,7 @@ export async function importWorkspaceBackup(
   try {
     await unzipArchive(path.resolve(sourceZipPath), extractedDir);
     const workspaceDir = await resolveExtractedWorkspaceDir(extractedDir);
-    await fs.cp(workspaceDir, stagedDir, { recursive: true });
+    await copyValidatedWorkspaceTree(workspaceDir, stagedDir);
     await ensureBaseDir(stagedDir);
   } catch (error) {
     await fs.rm(tempRoot, { recursive: true, force: true });
