@@ -12,6 +12,7 @@ const SETTINGS_PATCH_KEYS = [
   'editorFontSize',
   'lineWrap',
   'previewOpen',
+  'spellcheckLocale',
 ] as const satisfies readonly (keyof AppSettings)[];
 const NOTES_CREATE_KEYS = ['notebookId', 'title', 'body'] as const;
 const NOTES_UPDATE_KEYS = [
@@ -155,6 +156,15 @@ export const settingsPatchSchema: Schema<Partial<AppSettings>> = {
 
     if (value.previewOpen !== undefined && typeof value.previewOpen !== 'boolean') {
       schemaError('Invalid settings.previewOpen value.');
+    }
+
+    if (
+      value.spellcheckLocale !== undefined &&
+      value.spellcheckLocale !== 'pt-BR' &&
+      value.spellcheckLocale !== 'es-ES' &&
+      value.spellcheckLocale !== 'en-US'
+    ) {
+      schemaError('Invalid settings.spellcheckLocale value.');
     }
 
     return value as Partial<AppSettings>;

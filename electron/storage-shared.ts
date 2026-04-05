@@ -17,6 +17,7 @@ export const SETTINGS_THEME_VALUES = ['workbench-dark', 'workbench-light'] as co
 export const SETTINGS_LAYOUT_VALUES = ['workbench', 'writer', 'editor'] as const;
 export const SETTINGS_FONT_SIZE_VALUES = ['sm', 'md', 'lg'] as const;
 export const SETTINGS_LINE_WRAP_VALUES = ['wrap', 'scroll'] as const;
+export const SETTINGS_SPELLCHECK_LOCALE_VALUES = ['pt-BR', 'es-ES', 'en-US'] as const;
 export const NOTE_STATUS_VALUES = ['active', 'onHold', 'completed', 'dropped'] as const;
 export const TRASH_NOTEBOOK_ID = '.trash';
 export const TRASH_NOTEBOOKS_DIR = '.notebooks';

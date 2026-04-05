@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,
+  spellcheckLocale: 'pt-BR',
 };
 
 const DEFAULT_PROFILE: DesktopProfile = {

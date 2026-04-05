@@ -51,6 +51,7 @@ export interface AppSettings {
   editorFontSize: 'sm' | 'md' | 'lg';
   lineWrap: 'wrap' | 'scroll';
   previewOpen: boolean;
+  spellcheckLocale: 'pt-BR' | 'es-ES' | 'en-US';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -59,6 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   editorFontSize: 'md',
   lineWrap: 'wrap',
   previewOpen: false,
+  spellcheckLocale: 'pt-BR',
 };
 
 const NOTEBOOK_NAME_PATTERN = /[<>:"/\\|?*]/g;
