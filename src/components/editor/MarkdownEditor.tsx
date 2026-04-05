@@ -253,6 +253,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         keyBindings,
         spellcheckAttributes,
         editorSpellcheckAttributes,
+        EditorView.cspNonce.of(import.meta.env.APP_CSP_NONCE),
         EDITOR_THEME,
       ];
       return lineWrap === 'wrap'
