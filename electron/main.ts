@@ -1,4 +1,5 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,10 +46,32 @@ const isDev = !app.isPackaged;
 const execFileAsync = promisify(execFile);
 const ZIP_ARCHIVE_FILTERS = [{ name: 'ZIP Archives', extensions: ['zip'] }];
 const ALLOWED_SPELLCHECK_LOCALES = ['pt-BR', 'es-ES', 'en-US'] as const;
+const UPDATE_STATUS_CHANNEL = 'app:updateStatus';
+const GET_UPDATE_STATUS_CHANNEL = 'app:getUpdateStatus';
+const QUIT_AND_INSTALL_UPDATE_CHANNEL = 'app:quitAndInstallUpdate';
 
 type AsyncHandler<Payload> = (payload: Payload) => Promise<unknown>;
 type AsyncVoidHandler = () => Promise<unknown>;
 type SpellcheckLocale = (typeof ALLOWED_SPELLCHECK_LOCALES)[number];
+type UpdateStatus =
+  | { state: 'checking' }
+  | { state: 'available'; version: string }
+  | {
+      state: 'downloading';
+      version: string;
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
+
+let latestUpdateStatus: UpdateStatus | null = null;
+let pendingUpdateVersion: string | null = null;
+let isUpdateReady = false;
+let isAutoUpdaterConfigured = false;
+let hasStartedUpdateCheck = false;
 
 function wrapIpcError(error: unknown): never {
   throw new Error(serializeAppError(error));
@@ -169,6 +192,100 @@ function registerHandler(channel: string, handler: AsyncVoidHandler) {
       wrapIpcError(error);
     }
   });
+}
+
+function broadcastUpdateStatus(status: UpdateStatus) {
+  latestUpdateStatus = status;
+
+  for (const mainWindow of BrowserWindow.getAllWindows()) {
+    mainWindow.webContents.send(UPDATE_STATUS_CHANNEL, status);
+  }
+}
+
+function resetUpdateStatus() {
+  latestUpdateStatus = null;
+  pendingUpdateVersion = null;
+  isUpdateReady = false;
+}
+
+function registerAutoUpdater() {
+  if (isAutoUpdaterConfigured || !app.isPackaged) {
+    return;
+  }
+
+  isAutoUpdaterConfigured = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    isUpdateReady = false;
+    broadcastUpdateStatus({ state: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    pendingUpdateVersion = info.version;
+    broadcastUpdateStatus({
+      state: 'available',
+      version: info.version,
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    broadcastUpdateStatus({
+      state: 'downloading',
+      version: pendingUpdateVersion ?? app.getVersion(),
+      percent: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    pendingUpdateVersion = info.version;
+    isUpdateReady = true;
+    broadcastUpdateStatus({
+      state: 'downloaded',
+      version: info.version,
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    resetUpdateStatus();
+  });
+
+  autoUpdater.on('error', (error) => {
+    isUpdateReady = false;
+    broadcastUpdateStatus({
+      state: 'error',
+      message: error?.message ?? 'Failed to check for updates.',
+    });
+  });
+}
+
+async function checkForAppUpdates() {
+  if (!app.isPackaged || isDev || process.env.SMARTKMARK_DISABLE_AUTO_UPDATE === '1') {
+    return;
+  }
+
+  registerAutoUpdater();
+
+  if (hasStartedUpdateCheck) {
+    return;
+  }
+
+  hasStartedUpdateCheck = true;
+
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    hasStartedUpdateCheck = false;
+    broadcastUpdateStatus({
+      state: 'error',
+      message: error instanceof Error ? error.message : 'Failed to check for updates.',
+    });
+  }
 }
 
 function createMainWindow(): BrowserWindow {
@@ -319,12 +436,24 @@ function registerBackupHandlers() {
   registerHandler('backup:createIncremental', createIncrementalWorkspaceBackup);
 }
 
+function registerUpdateHandlers() {
+  ipcMain.handle(GET_UPDATE_STATUS_CHANNEL, async () => latestUpdateStatus);
+  ipcMain.handle(QUIT_AND_INSTALL_UPDATE_CHANNEL, async () => {
+    if (!isUpdateReady) {
+      return;
+    }
+
+    autoUpdater.quitAndInstall(false, true);
+  });
+}
+
 function registerIpcHandlers() {
   registerNotebookHandlers();
   registerNoteHandlers();
   registerProfileHandlers();
   registerSettingsHandlers();
   registerBackupHandlers();
+  registerUpdateHandlers();
 }
 
 async function openMainWindow() {
@@ -332,6 +461,12 @@ async function openMainWindow() {
   await loadMainWindow(mainWindow);
   const settings = await getSettings(dataDir());
   applySpellcheckLocale(mainWindow, settings.spellcheckLocale);
+
+  if (latestUpdateStatus) {
+    mainWindow.webContents.send(UPDATE_STATUS_CHANNEL, latestUpdateStatus);
+  }
+
+  void checkForAppUpdates();
 }
 
 async function bootstrapApp() {

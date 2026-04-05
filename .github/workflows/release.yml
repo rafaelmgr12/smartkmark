@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Beta version to release, for example 0.1.0-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate version input
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            echo "Version must match x.y.z-beta.N"
+            exit 1
+          fi
+
+          TAG="v$INPUT_VERSION"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            exit 1
+          fi
+
+          {
+            echo "value=$INPUT_VERSION"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bump version
+        run: npm version "${{ steps.version.outputs.value }}" --no-git-tag-version
+
+      - name: Validate project
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+
+      - name: Commit release version
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(release): v$VERSION"
+          git tag "v$VERSION"
+
+      - name: Push release commit and tag
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --prerelease \
+            --generate-notes \
+            --verify-tag
+
+  package:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            build_args: --mac dmg --x64
+            require_signing: true
+            require_notarization: true
+          - os: windows-latest
+            name: windows
+            build_args: --win nsis --x64
+            require_signing: true
+            require_notarization: false
+          - os: ubuntu-latest
+            name: linux
+            build_args: --linux AppImage deb --x64
+            require_signing: false
+            require_notarization: false
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Load macOS signing credentials
+        if: matrix.name == 'macos'
+        shell: bash
+        env:
+          CSC_LINK_MACOS: ${{ secrets.CSC_LINK_MACOS }}
+          CSC_KEY_PASSWORD_MACOS: ${{ secrets.CSC_KEY_PASSWORD_MACOS }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          {
+            echo "CSC_LINK=$CSC_LINK_MACOS"
+            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD_MACOS"
+            echo "APPLE_ID=$APPLE_ID"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Load Windows signing credentials
+        if: matrix.name == 'windows'
+        shell: bash
+        env:
+          CSC_LINK_WINDOWS: ${{ secrets.CSC_LINK_WINDOWS }}
+          CSC_KEY_PASSWORD_WINDOWS: ${{ secrets.CSC_KEY_PASSWORD_WINDOWS }}
+        run: |
+          {
+            echo "CSC_LINK=$CSC_LINK_WINDOWS"
+            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD_WINDOWS"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate required release secrets
+        shell: bash
+        run: |
+          if [[ "${{ matrix.require_signing }}" == "true" ]]; then
+            if [[ -z "${CSC_LINK:-}" || -z "${CSC_KEY_PASSWORD:-}" ]]; then
+              echo "Missing signing secrets for ${{ matrix.name }} release build"
+              exit 1
+            fi
+          fi
+
+          if [[ "${{ matrix.require_notarization }}" == "true" ]]; then
+            if [[ -z "${APPLE_ID:-}" || -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" || -z "${APPLE_TEAM_ID:-}" ]]; then
+              echo "Missing Apple notarization secrets for macOS release build"
+              exit 1
+            fi
+          fi
+
+      - name: Build and publish artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMARTKMARK_RELEASE_BUILD: "1"
+        run: |
+          npm run build
+          npx electron-builder ${{ matrix.build_args }} --publish always

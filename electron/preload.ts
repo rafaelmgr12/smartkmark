@@ -1,4 +1,21 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+
+const UPDATE_STATUS_CHANNEL = 'app:updateStatus';
+const GET_UPDATE_STATUS_CHANNEL = 'app:getUpdateStatus';
+
+type UpdateStatus =
+  | { state: 'checking' }
+  | { state: 'available'; version: string }
+  | {
+      state: 'downloading';
+      version: string;
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
 
 function parseError(error: unknown) {
   if (error instanceof Error) {
@@ -65,4 +82,21 @@ contextBridge.exposeInMainWorld('desktopApi', {
   exportBackup: () => invoke('backup:export'),
   importBackup: () => invoke('backup:import'),
   createIncrementalBackup: () => invoke('backup:createIncremental'),
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => {
+    const wrappedListener = (_event: IpcRendererEvent, status: UpdateStatus) => {
+      listener(status);
+    };
+
+    ipcRenderer.on(UPDATE_STATUS_CHANNEL, wrappedListener);
+    void invoke<UpdateStatus | null>(GET_UPDATE_STATUS_CHANNEL).then((status) => {
+      if (status) {
+        listener(status);
+      }
+    });
+
+    return () => {
+      ipcRenderer.removeListener(UPDATE_STATUS_CHANNEL, wrappedListener);
+    };
+  },
+  quitAndInstallUpdate: () => invoke('app:quitAndInstallUpdate'),
 });

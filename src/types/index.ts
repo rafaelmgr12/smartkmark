@@ -36,6 +36,20 @@ export interface BackupActionResult {
   filePath?: string;
 }
 
+export type UpdateStatus =
+  | { state: 'checking' }
+  | { state: 'available'; version: string }
+  | {
+      state: 'downloading';
+      version: string;
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
+
 export type DesktopErrorCode =
   | 'VALIDATION_ERROR'
   | 'NOT_FOUND'
@@ -112,6 +126,8 @@ export interface DesktopApi {
   exportBackup: () => Promise<BackupActionResult>;
   importBackup: () => Promise<BackupActionResult>;
   createIncrementalBackup: () => Promise<{ filePath: string }>;
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
+  quitAndInstallUpdate: () => Promise<void>;
 }
 
 declare global {

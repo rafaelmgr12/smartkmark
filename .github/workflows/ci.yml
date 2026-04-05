@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -32,8 +32,20 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit and component tests
-        run: npm run test
+      - name: Coverage
+        run: npm run test:coverage
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          node -e "const fs=require('node:fs'); const summary=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')).total; const lines=['## Coverage', '', '| Metric | Coverage |', '| --- | --- |', '| Statements | ' + summary.statements.pct + '% |', '| Branches | ' + summary.branches.pct + '% |', '| Functions | ' + summary.functions.pct + '% |', '| Lines | ' + summary.lines.pct + '% |']; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');"
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
 
       - name: Build
         run: npm run build

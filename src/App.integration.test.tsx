@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import App from './App';
 import { pressWindowShortcut, renderWithDesktopApi } from './test/helpers';
@@ -91,6 +91,71 @@ describe('App', () => {
       expect(
         screen.getByRole('button', { name: 'Backend' })
       ).toBeInTheDocument()
+    );
+  });
+
+  it('shows update progress and lets the user restart after download', async () => {
+    const workspace = createSeededWorkspace();
+    const { desktop, user } = renderWithDesktopApi(<App />, {
+      seed: workspace,
+    });
+
+    await screen.findByRole('heading', { name: 'Developer Workbench' });
+
+    act(() => {
+      desktop.emitUpdateStatus({
+        state: 'downloading',
+        version: '0.1.0-beta.1',
+        percent: 52,
+        bytesPerSecond: 1024,
+        transferred: 1024,
+        total: 2048,
+      });
+    });
+
+    expect(
+      await screen.findByText('SmartKMark 0.1.0-beta.1 is 52% ready.')
+    ).toBeInTheDocument();
+
+    act(() => {
+      desktop.emitUpdateStatus({
+        state: 'downloaded',
+        version: '0.1.0-beta.1',
+      });
+    });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Restart to update' })
+    );
+
+    expect(desktop.mocks.quitAndInstallUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a dismissible update error banner', async () => {
+    const workspace = createSeededWorkspace();
+    const { desktop, user } = renderWithDesktopApi(<App />, {
+      seed: workspace,
+    });
+
+    await screen.findByRole('heading', { name: 'Developer Workbench' });
+
+    act(() => {
+      desktop.emitUpdateStatus({
+        state: 'error',
+        message: 'Failed to check for updates.',
+      });
+    });
+
+    expect(
+      await screen.findByText('Failed to check for updates.')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Failed to check for updates.')
+      ).not.toBeInTheDocument()
     );
   });
 });

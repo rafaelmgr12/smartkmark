@@ -61,6 +61,7 @@ npm run build
 | `npm run test` | Run unit and integration suites |
 | `npm run test:unit` | Run pure unit tests for utilities and storage |
 | `npm run test:integration` | Run hook and component integration tests with mocked `desktopApi` |
+| `npm run test:coverage` | Run unit + integration suites with enforced coverage thresholds |
 | `npm run test:e2e` | Run Playwright renderer e2e tests against the production build |
 
 ## Documentation

@@ -83,6 +83,7 @@ export async function installDesktopApiFixture(
       };
 
       const nextTimestamp = () => new Date().toISOString();
+      const updateListeners = new Set<(status: unknown) => void>();
 
       Object.defineProperty(window, 'desktopApi', {
         configurable: true,
@@ -283,6 +284,13 @@ export async function installDesktopApiFixture(
           createIncrementalBackup: async () => ({
             filePath: '/tmp/smartkmark-backup-20260101-000000.zip',
           }),
+          onUpdateStatus: (listener: (status: unknown) => void) => {
+            updateListeners.add(listener);
+            return () => {
+              updateListeners.delete(listener);
+            };
+          },
+          quitAndInstallUpdate: async () => {},
         },
       });
     },

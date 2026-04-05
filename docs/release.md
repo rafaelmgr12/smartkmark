@@ -52,13 +52,27 @@ If the Apple notarization variables are missing, packaging still works, but nota
 
 Linux targets do not require signing for local packaging in the current setup.
 
+## Beta Release Workflow
+
+The first distribution channel is a manual GitHub prerelease workflow:
+
+1. Open the `Release` workflow in GitHub Actions.
+2. Provide a version in the format `x.y.z-beta.N`.
+3. The workflow bumps `package.json` and `package-lock.json`, validates the project, commits `chore(release): v<version>` back to `main`, tags `v<version>`, creates a GitHub prerelease with generated notes, and uploads platform artifacts.
+
+Release jobs currently target:
+
+- macOS `dmg` (`x64`)
+- Windows `nsis` (`x64`)
+- Linux `AppImage` and `deb` (`x64`)
+
 ## CI Expectations
 
 The CI workflow installs Playwright Chromium and runs:
 
 - `npm run typecheck`
 - `npm run lint`
-- `npm run test`
+- `npm run test:coverage`
 - `npm run build`
 - `npm run test:e2e`
 

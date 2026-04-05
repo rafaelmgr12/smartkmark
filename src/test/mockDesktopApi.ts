@@ -3,6 +3,7 @@ import type {
   DesktopApi,
   Note,
   Notebook,
+  UpdateStatus,
 } from '../types';
 import {
   createDesktopSeed,
@@ -43,6 +44,7 @@ export interface DesktopApiMockController {
     [K in keyof DesktopApi]: ReturnType<typeof vi.fn<DesktopApi[K]>>;
   };
   getState: () => DesktopSeed;
+  emitUpdateStatus: (status: UpdateStatus) => void;
 }
 
 export function createDesktopApiMock(
@@ -50,6 +52,7 @@ export function createDesktopApiMock(
 ): DesktopApiMockController {
   const state = createDesktopSeed(seedOverrides);
   let noteCounter = state.notes.length;
+  const updateListeners = new Set<(status: UpdateStatus) => void>();
 
   const listNotebooks = vi.fn<DesktopApi['listNotebooks']>(async () =>
     clone(state.notebooks)
@@ -237,6 +240,15 @@ export function createDesktopApiMock(
     })
   );
 
+  const onUpdateStatus = vi.fn<DesktopApi['onUpdateStatus']>((listener) => {
+    updateListeners.add(listener);
+    return () => {
+      updateListeners.delete(listener);
+    };
+  });
+
+  const quitAndInstallUpdate = vi.fn<DesktopApi['quitAndInstallUpdate']>(async () => {});
+
   const mocks = {
     listNotebooks,
     createNotebook,
@@ -257,12 +269,21 @@ export function createDesktopApiMock(
     exportBackup,
     importBackup,
     createIncrementalBackup,
+    onUpdateStatus,
+    quitAndInstallUpdate,
+  };
+
+  const emitUpdateStatus = (status: UpdateStatus) => {
+    for (const listener of updateListeners) {
+      listener(clone(status));
+    }
   };
 
   return {
     api: mocks,
     mocks,
     getState: () => clone(state),
+    emitUpdateStatus,
   };
 }
 

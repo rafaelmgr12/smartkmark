@@ -4,8 +4,9 @@ import Sidebar from './components/sidebar/Sidebar';
 import NoteList from './components/notes/NoteList';
 import TrashNoteList from './components/notes/TrashNoteList';
 import QuickOpenModal from './components/search/QuickOpenModal';
+import UpdateBanner from './components/ui/UpdateBanner';
 import useAppState from './hooks/useAppState';
-import type { LayoutMode, NoteMeta } from './types';
+import type { LayoutMode, NoteMeta, UpdateStatus } from './types';
 
 const NoteEditor = lazy(() => import('./components/editor/NoteEditor'));
 
@@ -51,6 +52,7 @@ function App() {
   } = useAppState();
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const getTargetNotebook = useCallback((): string => {
     if (activeFilter !== 'all' && activeFilter !== 'pinned') {
@@ -152,6 +154,12 @@ function App() {
     document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
 
+  useEffect(() => {
+    return window.desktopApi.onUpdateStatus((status) => {
+      setUpdateStatus(status);
+    });
+  }, []);
+
   const showSidebar = settings.layoutMode === 'workbench';
   const showNoteList =
     settings.layoutMode === 'workbench' || settings.layoutMode === 'writer';
@@ -178,6 +186,14 @@ function App() {
     }
   }, [createIncrementalBackup]);
 
+  const handleRestartToUpdate = useCallback(async () => {
+    await window.desktopApi.quitAndInstallUpdate();
+  }, []);
+
+  const dismissUpdateError = useCallback(() => {
+    setUpdateStatus((current) => (current?.state === 'error' ? null : current));
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -198,6 +214,11 @@ function App() {
 
   return (
     <div className="workbench-shell p-4 pt-14">
+      <UpdateBanner
+        status={updateStatus}
+        onRestart={handleRestartToUpdate}
+        onDismissError={dismissUpdateError}
+      />
       <QuickOpenModal
         open={isQuickOpenVisible}
         notes={notes}
