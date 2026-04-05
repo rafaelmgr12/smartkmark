@@ -53,6 +53,7 @@ interface MarkdownEditorProps {
   onTogglePreview: () => void;
   fontSize: EditorFontSize;
   lineWrap: LineWrapMode;
+  spellcheckLocale: string;
 }
 
 const FONT_SIZE_MAP: Record<EditorFontSize, string> = {
@@ -120,7 +121,18 @@ function commandTransform(command: EditorCommand) {
 }
 
 const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  ({ value, onChange, onSave, onTogglePreview, fontSize, lineWrap }, ref) => {
+  (
+    {
+      value,
+      onChange,
+      onSave,
+      onTogglePreview,
+      fontSize,
+      lineWrap,
+      spellcheckLocale,
+    },
+    ref
+  ) => {
     const viewRef = useRef<EditorView | null>(null);
 
     const applyCommand = useCallback((command: EditorCommand) => {
@@ -203,11 +215,15 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
         },
       ]);
 
-      const shared = [markdown(), keyBindings, EDITOR_THEME];
+      const spellcheckAttributes = EditorView.contentAttributes.of({
+        spellcheck: 'true',
+        lang: spellcheckLocale,
+      });
+      const shared = [markdown(), keyBindings, spellcheckAttributes, EDITOR_THEME];
       return lineWrap === 'wrap'
         ? [...shared, EditorView.lineWrapping]
         : shared;
-    }, [applyCommand, lineWrap, onSave, onTogglePreview]);
+    }, [applyCommand, lineWrap, onSave, onTogglePreview, spellcheckLocale]);
 
     return (
       <div className="h-full overflow-hidden">

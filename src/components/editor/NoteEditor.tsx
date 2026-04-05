@@ -485,6 +485,7 @@ export default function NoteEditor({
             }
             fontSize={settings.editorFontSize}
             lineWrap={settings.lineWrap}
+            spellcheckLocale={settings.spellcheckLocale}
           />
         </div>
 
