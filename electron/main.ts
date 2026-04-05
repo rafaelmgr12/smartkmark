@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { Menu, app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -44,9 +44,11 @@ import {
 const isDev = !app.isPackaged;
 const execFileAsync = promisify(execFile);
 const ZIP_ARCHIVE_FILTERS = [{ name: 'ZIP Archives', extensions: ['zip'] }];
+const ALLOWED_SPELLCHECK_LOCALES = ['pt-BR', 'es-ES', 'en-US'] as const;
 
 type AsyncHandler<Payload> = (payload: Payload) => Promise<unknown>;
 type AsyncVoidHandler = () => Promise<unknown>;
+type SpellcheckLocale = (typeof ALLOWED_SPELLCHECK_LOCALES)[number];
 
 function wrapIpcError(error: unknown): never {
   throw new Error(serializeAppError(error));
@@ -100,6 +102,50 @@ function dataDir(): string {
   return getBaseDir();
 }
 
+function resolveSpellcheckLocale(locale: unknown): SpellcheckLocale {
+  return ALLOWED_SPELLCHECK_LOCALES.includes(locale as SpellcheckLocale)
+    ? (locale as SpellcheckLocale)
+    : 'en-US';
+}
+
+function applySpellcheckLocale(mainWindow: BrowserWindow, locale: unknown): void {
+  const resolvedLocale = resolveSpellcheckLocale(locale);
+  mainWindow.webContents.session.setSpellCheckerLanguages([resolvedLocale]);
+}
+
+function registerSpellcheckContextMenu(mainWindow: BrowserWindow): void {
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
+
+    if (params.misspelledWord && params.dictionarySuggestions.length > 0) {
+      for (const suggestion of params.dictionarySuggestions.slice(0, 6)) {
+        menuTemplate.push({
+          label: suggestion,
+          click: () => mainWindow.webContents.replaceMisspelling(suggestion),
+        });
+      }
+      menuTemplate.push({ type: 'separator' });
+    }
+
+    if (params.misspelledWord) {
+      menuTemplate.push({
+        label: 'Add to Dictionary',
+        click: () =>
+          mainWindow.webContents.session.addWordToSpellCheckerDictionary(
+            params.misspelledWord
+          ),
+      });
+      menuTemplate.push({ type: 'separator' });
+    }
+
+    menuTemplate.push({ role: 'undo' }, { role: 'redo' }, { type: 'separator' });
+    menuTemplate.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' });
+    menuTemplate.push({ role: 'selectAll' });
+
+    Menu.buildFromTemplate(menuTemplate).popup({ window: mainWindow });
+  });
+}
+
 function registerValidatedHandler<Payload>(
   channel: string,
   schema: Schema<Payload>,
@@ -141,6 +187,8 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
+  applySpellcheckLocale(mainWindow, 'en-US');
+  registerSpellcheckContextMenu(mainWindow);
   configureWindowNavigation(mainWindow, getAppEntryUrl(isDev), isDev);
   return mainWindow;
 }
@@ -248,9 +296,20 @@ function registerProfileHandlers() {
 
 function registerSettingsHandlers() {
   registerValidatedHandler('settings:get', tupleSchema(), async () => getSettings(dataDir()));
-  registerValidatedHandler('settings:update', tupleSchema(settingsPatchSchema), async ([patch]) =>
-    updateSettings(dataDir(), patch)
-  );
+  ipcMain.handle('settings:update', async (_event, ...rawArgs: unknown[]) => {
+    try {
+      const [patch] = tupleSchema(settingsPatchSchema).parse(rawArgs);
+      const nextSettings = await updateSettings(dataDir(), patch);
+
+      for (const mainWindow of BrowserWindow.getAllWindows()) {
+        applySpellcheckLocale(mainWindow, nextSettings.spellcheckLocale);
+      }
+
+      return nextSettings;
+    } catch (error) {
+      wrapIpcError(error);
+    }
+  });
 }
 
 function registerBackupHandlers() {
@@ -270,6 +329,8 @@ function registerIpcHandlers() {
 async function openMainWindow() {
   const mainWindow = createMainWindow();
   await loadMainWindow(mainWindow);
+  const settings = await getSettings(dataDir());
+  applySpellcheckLocale(mainWindow, settings.spellcheckLocale);
 }
 
 async function bootstrapApp() {
