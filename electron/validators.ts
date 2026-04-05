@@ -4,7 +4,7 @@ import {
   type AppSettings,
   type NoteStatus,
   type NoteTag,
-} from './storage';
+} from './storage-core';
 
 const SETTINGS_PATCH_KEYS = [
   'theme',
