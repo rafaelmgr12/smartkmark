@@ -7,9 +7,11 @@ import {
   pressWindowShortcut,
 } from '../../test/helpers';
 import { createNotebook, createNote, createSettings } from '../../test/factories';
+import { markdownEditorSpy } from './MarkdownEditor';
 
 vi.mock('./MarkdownEditor', async () => {
   const React = await import('react');
+  const markdownEditorSpy = vi.fn();
 
   const MockMarkdownEditor = React.forwardRef<
     { applyCommand: (command: string) => void; focus: () => void },
@@ -18,8 +20,10 @@ vi.mock('./MarkdownEditor', async () => {
       onChange: (value: string) => void;
       onSave: () => void;
       onTogglePreview: () => void;
+      spellcheckLocale: string;
     }
-  >(({ value, onChange, onSave, onTogglePreview }, ref) => {
+  >(({ value, onChange, onSave, onTogglePreview, spellcheckLocale }, ref) => {
+    markdownEditorSpy({ spellcheckLocale });
     React.useImperativeHandle(ref, () => ({
       applyCommand: vi.fn(),
       focus: vi.fn(),
@@ -27,6 +31,7 @@ vi.mock('./MarkdownEditor', async () => {
 
     return (
       <div>
+        <span data-testid="editor-locale">{spellcheckLocale}</span>
         <textarea
           aria-label="Markdown editor"
           value={value}
@@ -46,6 +51,7 @@ vi.mock('./MarkdownEditor', async () => {
 
   return {
     default: MockMarkdownEditor,
+    markdownEditorSpy,
   };
 });
 
@@ -126,6 +132,7 @@ function renderEditor(overrides: Partial<ComponentProps<typeof NoteEditor>> = {}
 describe('NoteEditor', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    markdownEditorSpy.mockClear();
   });
 
   afterEach(() => {
@@ -312,5 +319,64 @@ describe('NoteEditor', () => {
     expect(screen.getByPlaceholderText('Note title...')).toHaveValue('Second note');
     expect(screen.getByLabelText('Markdown editor')).toHaveValue('Second body');
     expect(screen.getByText('Saved')).toBeInTheDocument();
+  });
+
+  it('passes the selected spellcheck locale to MarkdownEditor', () => {
+    renderEditor({
+      settings: createSettings({ spellcheckLocale: 'es-ES' }),
+    });
+
+    expect(screen.getByTestId('editor-locale')).toHaveTextContent('es-ES');
+    expect(markdownEditorSpy).toHaveBeenLastCalledWith({
+      spellcheckLocale: 'es-ES',
+    });
+  });
+
+  it('applies locale updates by rerendering MarkdownEditor with new locale', () => {
+    const note = createNote({
+      id: 'note-locale',
+      title: 'Locale note',
+      notebookId: inbox.id,
+      body: 'Locale body',
+      updatedAt: '2026-01-01T12:00:00.000Z',
+    });
+    const onPatchSettings = vi.fn().mockResolvedValue(createSettings());
+    const onDeleteNote = vi.fn().mockResolvedValue(undefined);
+    const onTogglePin = vi.fn().mockResolvedValue(undefined);
+    const onUpdateNote = vi.fn().mockResolvedValue(note);
+    const onMoveNote = vi.fn().mockResolvedValue(note);
+
+    const { rerender } = render(
+      <NoteEditor
+        note={note}
+        notebooks={[inbox, backend]}
+        settings={createSettings({ spellcheckLocale: 'pt-BR' })}
+        onDeleteNote={onDeleteNote}
+        onTogglePin={onTogglePin}
+        onUpdateNote={onUpdateNote}
+        onMoveNote={onMoveNote}
+        onPatchSettings={onPatchSettings}
+      />
+    );
+
+    expect(screen.getByTestId('editor-locale')).toHaveTextContent('pt-BR');
+
+    rerender(
+      <NoteEditor
+        note={note}
+        notebooks={[inbox, backend]}
+        settings={createSettings({ spellcheckLocale: 'en-US' })}
+        onDeleteNote={onDeleteNote}
+        onTogglePin={onTogglePin}
+        onUpdateNote={onUpdateNote}
+        onMoveNote={onMoveNote}
+        onPatchSettings={onPatchSettings}
+      />
+    );
+
+    expect(screen.getByTestId('editor-locale')).toHaveTextContent('en-US');
+    expect(markdownEditorSpy).toHaveBeenLastCalledWith({
+      spellcheckLocale: 'en-US',
+    });
   });
 });

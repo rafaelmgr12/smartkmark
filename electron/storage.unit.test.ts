@@ -79,6 +79,19 @@ describe('storage', () => {
     expect(settings.previewOpen).toBe(true);
   });
 
+  it('uses default spellcheck locale and persists locale updates', async () => {
+    const baseDir = await createTempWorkspace();
+
+    const defaults = await updateSettings(baseDir, {});
+    expect(defaults.spellcheckLocale).toBe('pt-BR');
+
+    const updated = await updateSettings(baseDir, { spellcheckLocale: 'en-US' });
+    expect(updated.spellcheckLocale).toBe('en-US');
+
+    const persisted = await updateSettings(baseDir, {});
+    expect(persisted.spellcheckLocale).toBe('en-US');
+  });
+
   it('lists the default inbox notebook', async () => {
     const baseDir = await createTempWorkspace();
     const notebooks = await listNotebooks(baseDir);
