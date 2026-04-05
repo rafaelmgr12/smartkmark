@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -85,6 +86,23 @@ const EDITOR_THEME = EditorView.theme({
   },
 });
 
+function applyNativeSpellcheckAttributes(
+  view: EditorView,
+  spellcheckLocale: string
+): void {
+  const attributes = {
+    spellcheck: 'true',
+    lang: spellcheckLocale,
+    autocorrect: 'on',
+    writingsuggestions: 'true',
+  } as const;
+
+  for (const [key, value] of Object.entries(attributes)) {
+    view.contentDOM.setAttribute(key, value);
+    view.dom.setAttribute(key, value);
+  }
+}
+
 function commandTransform(command: EditorCommand) {
   switch (command) {
     case 'bold':
@@ -134,6 +152,12 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
     ref
   ) => {
     const viewRef = useRef<EditorView | null>(null);
+
+    useEffect(() => {
+      if (viewRef.current) {
+        applyNativeSpellcheckAttributes(viewRef.current, spellcheckLocale);
+      }
+    }, [spellcheckLocale]);
 
     const applyCommand = useCallback((command: EditorCommand) => {
       const view = viewRef.current;
@@ -218,8 +242,19 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       const spellcheckAttributes = EditorView.contentAttributes.of({
         spellcheck: 'true',
         lang: spellcheckLocale,
+        autocorrect: 'on',
+        writingsuggestions: 'true',
       });
-      const shared = [markdown(), keyBindings, spellcheckAttributes, EDITOR_THEME];
+      const editorSpellcheckAttributes = EditorView.editorAttributes.of({
+        lang: spellcheckLocale,
+      });
+      const shared = [
+        markdown(),
+        keyBindings,
+        spellcheckAttributes,
+        editorSpellcheckAttributes,
+        EDITOR_THEME,
+      ];
       return lineWrap === 'wrap'
         ? [...shared, EditorView.lineWrapping]
         : shared;
@@ -242,6 +277,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
           extensions={extensions}
           onCreateEditor={(view) => {
             viewRef.current = view;
+            applyNativeSpellcheckAttributes(view, spellcheckLocale);
           }}
           onChange={(nextValue) => {
             onChange(nextValue);
