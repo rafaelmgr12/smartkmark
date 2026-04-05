@@ -1,11 +1,15 @@
-import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
-import yauzl, { type Entry as YauzlEntry, type ZipFile as YauzlZipFile } from 'yauzl';
-import yazl, { type ZipFile as YazlZipFile } from 'yazl';
+import {
+  ArchiveReadError,
+  ArchiveValidationError,
+  ArchiveWriteError,
+  createZipArchive,
+  extractZipArchive,
+  validateZipArchiveEntries,
+} from './zip-archive';
 
 export interface Notebook {
   id: string;
@@ -310,202 +314,6 @@ function getTimestampLabel(date = new Date()): string {
   return `${year}${month}${day}-${hours}${minutes}${seconds}`;
 }
 
-async function zipDirectory(sourceDir: string, targetZipPath: string): Promise<void> {
-  await fs.mkdir(path.dirname(targetZipPath), { recursive: true });
-
-  try {
-    const zipFile = new yazl.ZipFile();
-    const outputStream = createWriteStream(targetZipPath);
-    const writePromise = pipeline(zipFile.outputStream, outputStream);
-
-    await addDirectoryToZip(zipFile, sourceDir, sourceDir);
-    zipFile.end();
-    await writePromise;
-  } catch (error) {
-    throw new AppError('WRITE_ERROR', 'Unable to export workspace backup zip.', {
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
-async function addDirectoryToZip(
-  zipFile: YazlZipFile,
-  currentDir: string,
-  rootDir: string
-): Promise<void> {
-  const entries = await fs.readdir(currentDir, { withFileTypes: true });
-  const normalizedDirPath = path.relative(rootDir, currentDir).replace(/\\/g, '/');
-
-  if (normalizedDirPath) {
-    zipFile.addEmptyDirectory(normalizedDirPath);
-  }
-
-  for (const entry of entries) {
-    const sourcePath = path.join(currentDir, entry.name);
-    const metadataPath = path.relative(rootDir, sourcePath).replace(/\\/g, '/');
-    const stats = await fs.lstat(sourcePath);
-
-    if (stats.isSymbolicLink()) {
-      throw new AppError(
-        'VALIDATION_ERROR',
-        `Workspace contains unsupported symbolic link: "${metadataPath}".`
-      );
-    }
-
-    if (stats.isDirectory()) {
-      await addDirectoryToZip(zipFile, sourcePath, rootDir);
-      continue;
-    }
-
-    if (!stats.isFile()) {
-      throw new AppError(
-        'VALIDATION_ERROR',
-        `Workspace contains unsupported entry: "${metadataPath}".`
-      );
-    }
-
-    zipFile.addFile(sourcePath, metadataPath);
-  }
-}
-
-function openZipFile(sourceZipPath: string): Promise<YauzlZipFile> {
-  return new Promise((resolve, reject) => {
-    yauzl.open(
-      sourceZipPath,
-      { lazyEntries: true, decodeStrings: true },
-      (error, zipFile) => {
-        if (error || !zipFile) {
-          reject(error ?? new Error('Unable to open zip file.'));
-          return;
-        }
-
-        resolve(zipFile);
-      }
-    );
-  });
-}
-
-function isDirectoryArchiveEntry(entry: YauzlEntry): boolean {
-  return entry.fileName.endsWith('/');
-}
-
-function isSymbolicLinkArchiveEntry(entry: YauzlEntry): boolean {
-  const fileType = (entry.externalFileAttributes >>> 16) & 0o170000;
-  return fileType === 0o120000;
-}
-
-function openArchiveReadStream(
-  zipFile: YauzlZipFile,
-  entry: YauzlEntry
-): Promise<NodeJS.ReadableStream> {
-  return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (error, stream) => {
-      if (error || !stream) {
-        reject(error ?? new Error('Unable to read archive entry.'));
-        return;
-      }
-
-      resolve(stream);
-    });
-  });
-}
-
-async function forEachArchiveEntry(
-  sourceZipPath: string,
-  onEntry: (entry: YauzlEntry, zipFile: YauzlZipFile) => Promise<void>
-): Promise<void> {
-  const zipFile = await openZipFile(sourceZipPath);
-
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-
-    const fail = (error: Error) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      zipFile.close();
-      reject(error);
-    };
-
-    zipFile.on('error', fail);
-    zipFile.on('end', () => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve();
-    });
-    zipFile.on('entry', (entry) => {
-      void onEntry(entry, zipFile)
-        .then(() => {
-          zipFile.readEntry();
-        })
-        .catch((error: unknown) => {
-          fail(error instanceof Error ? error : new Error('Unable to process archive entry.'));
-        });
-    });
-
-    zipFile.readEntry();
-  }).finally(() => {
-    zipFile.close();
-  });
-}
-
-async function extractArchive(sourceZipPath: string, destinationDir: string): Promise<void> {
-  try {
-    await forEachArchiveEntry(sourceZipPath, async (entry, zipFile) => {
-      assertSafeRelativePath(entry.fileName);
-
-      if (isSymbolicLinkArchiveEntry(entry)) {
-        throw new AppError(
-          'VALIDATION_ERROR',
-          'Backup archive contains symbolic links, which are not allowed.'
-        );
-      }
-
-      const targetPath = resolvePathWithinBaseDir(destinationDir, entry.fileName);
-      if (isDirectoryArchiveEntry(entry)) {
-        await fs.mkdir(targetPath, { recursive: true });
-        return;
-      }
-
-      await fs.mkdir(path.dirname(targetPath), { recursive: true });
-      const readStream = await openArchiveReadStream(zipFile, entry);
-      await pipeline(readStream, createWriteStream(targetPath));
-    });
-  } catch (error) {
-    throw new AppError('READ_ERROR', 'Unable to read backup zip file.', {
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
-async function validateArchiveEntries(sourceZipPath: string): Promise<void> {
-  try {
-    await forEachArchiveEntry(sourceZipPath, async (entry) => {
-      assertSafeRelativePath(entry.fileName);
-
-      if (isSymbolicLinkArchiveEntry(entry)) {
-        throw new AppError(
-          'VALIDATION_ERROR',
-          'Backup archive contains symbolic links, which are not allowed.'
-        );
-      }
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-
-    throw new AppError('READ_ERROR', 'Unable to inspect backup zip file.', {
-      details: error instanceof Error ? error.message : undefined,
-    });
-  }
-}
-
 function assertSafeRelativePath(relativePath: string): void {
   const normalized = relativePath.replace(/\\/g, '/');
   if (
@@ -644,7 +452,22 @@ export async function exportWorkspaceBackup(
   targetZipPath: string
 ): Promise<string> {
   await ensureBaseDir(baseDir);
-  await zipDirectory(baseDir, path.resolve(targetZipPath));
+  try {
+    await createZipArchive(baseDir, path.resolve(targetZipPath));
+  } catch (error) {
+    if (error instanceof ArchiveValidationError) {
+      throw new AppError('VALIDATION_ERROR', error.message);
+    }
+
+    if (error instanceof ArchiveWriteError) {
+      throw new AppError('WRITE_ERROR', 'Unable to export workspace backup zip.', {
+        details: error.cause instanceof Error ? error.cause.message : error.message,
+      });
+    }
+
+    throw error;
+  }
+
   return path.resolve(targetZipPath);
 }
 
@@ -668,8 +491,8 @@ export async function importWorkspaceBackup(
 
   try {
     const resolvedSourceZipPath = path.resolve(sourceZipPath);
-    await validateArchiveEntries(resolvedSourceZipPath);
-    await extractArchive(resolvedSourceZipPath, extractedDir);
+    await validateZipArchiveEntries(resolvedSourceZipPath);
+    await extractZipArchive(resolvedSourceZipPath, extractedDir);
     const workspaceDir = await resolveExtractedWorkspaceDir(extractedDir);
     await copyValidatedWorkspaceTree(workspaceDir, stagedDir);
     await ensureBaseDir(stagedDir);
@@ -677,6 +500,16 @@ export async function importWorkspaceBackup(
     await fs.rm(tempRoot, { recursive: true, force: true });
     if (error instanceof AppError) {
       throw error;
+    }
+
+    if (error instanceof ArchiveValidationError) {
+      throw new AppError('VALIDATION_ERROR', error.message);
+    }
+
+    if (error instanceof ArchiveReadError) {
+      throw new AppError('READ_ERROR', 'Unable to prepare backup import.', {
+        details: error.cause instanceof Error ? error.cause.message : error.message,
+      });
     }
 
     throw new AppError('READ_ERROR', 'Unable to prepare backup import.', {
