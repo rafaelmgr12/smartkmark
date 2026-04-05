@@ -7,11 +7,13 @@ import {
   pressWindowShortcut,
 } from '../../test/helpers';
 import { createNotebook, createNote, createSettings } from '../../test/factories';
-import { markdownEditorSpy } from './MarkdownEditor';
+
+const { markdownEditorSpy } = vi.hoisted(() => ({
+  markdownEditorSpy: vi.fn(),
+}));
 
 vi.mock('./MarkdownEditor', async () => {
   const React = await import('react');
-  const markdownEditorSpy = vi.fn();
 
   const MockMarkdownEditor = React.forwardRef<
     { applyCommand: (command: string) => void; focus: () => void },

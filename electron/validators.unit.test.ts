@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from './storage-core';
 import { settingsPatchSchema } from './validators';
 
 describe('settingsPatchSchema', () => {
@@ -24,7 +23,7 @@ describe('settingsPatchSchema', () => {
     {},
   ])('rejects invalid spellcheck locale %j', (spellcheckLocale) => {
     expect(() => settingsPatchSchema.parse({ spellcheckLocale })).toThrowError(
-      expect.objectContaining<AppError>({
+      expect.objectContaining({
         code: 'VALIDATION_ERROR',
         message: 'Invalid settings.spellcheckLocale value.',
       })
