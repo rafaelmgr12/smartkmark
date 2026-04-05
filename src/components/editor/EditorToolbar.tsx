@@ -16,29 +16,33 @@ import {
   Code2,
 } from 'lucide-react';
 import IconButton from '../ui/IconButton';
-import type { EditorFontSize, LineWrapMode } from '../../types';
+import type { EditorFontSize, LineWrapMode, SpellcheckLocale } from '../../types';
 import type { EditorCommand } from './MarkdownEditor';
 
 interface EditorToolbarProps {
   isPreviewOpen: boolean;
   fontSize: EditorFontSize;
   lineWrap: LineWrapMode;
+  spellcheckLocale: SpellcheckLocale;
   onTogglePreview: () => void;
   onToggleFullscreenPreview: () => void;
   onCommand: (command: EditorCommand) => void;
   onFontSizeChange: (value: EditorFontSize) => void;
   onLineWrapChange: (value: LineWrapMode) => void;
+  onSpellcheckLocaleChange: (value: SpellcheckLocale) => void;
 }
 
 export default function EditorToolbar({
   isPreviewOpen,
   fontSize,
   lineWrap,
+  spellcheckLocale,
   onTogglePreview,
   onToggleFullscreenPreview,
   onCommand,
   onFontSizeChange,
   onLineWrapChange,
+  onSpellcheckLocaleChange,
 }: EditorToolbarProps) {
   return (
     <div
@@ -156,6 +160,22 @@ export default function EditorToolbar({
         >
           <option value="wrap">Soft wrap</option>
           <option value="scroll">Horizontal</option>
+        </select>
+      </label>
+
+      <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
+        Idioma
+        <select
+          value={spellcheckLocale}
+          onChange={(event) =>
+            onSpellcheckLocaleChange(event.target.value as SpellcheckLocale)
+          }
+          className="rounded-lg border bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="es-ES">Español (España)</option>
+          <option value="en-US">English (US)</option>
         </select>
       </label>
 
