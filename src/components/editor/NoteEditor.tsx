@@ -449,6 +449,7 @@ export default function NoteEditor({
         isPreviewOpen={settings.previewOpen}
         fontSize={settings.editorFontSize}
         lineWrap={settings.lineWrap}
+        spellcheckLocale={settings.spellcheckLocale}
         onCommand={applyCommand}
         onTogglePreview={() =>
           void onPatchSettings({ previewOpen: !settings.previewOpen })
@@ -458,6 +459,9 @@ export default function NoteEditor({
           void onPatchSettings({ editorFontSize: value })
         }
         onLineWrapChange={(value) => void onPatchSettings({ lineWrap: value })}
+        onSpellcheckLocaleChange={(value) =>
+          void onPatchSettings({ spellcheckLocale: value })
+        }
       />
 
       {saveError ? (
