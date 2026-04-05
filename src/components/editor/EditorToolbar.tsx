@@ -164,7 +164,7 @@ export default function EditorToolbar({
       </label>
 
       <label className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-[var(--text-dim)]">
-        Idioma
+        Language
         <select
           value={spellcheckLocale}
           onChange={(event) =>
