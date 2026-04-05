@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="152" y1="124" x2="866" y2="916" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F4C81" />
+      <stop offset="1" stop-color="#17B890" />
+    </linearGradient>
+    <linearGradient id="paper" x1="512" y1="208" x2="512" y2="816" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" />
+      <stop offset="1" stop-color="#EAF3FF" />
+    </linearGradient>
+    <filter id="shadow" x="184" y="144" width="656" height="752" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+      <feOffset dy="24" />
+      <feGaussianBlur stdDeviation="24" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0313725 0 0 0 0 0.109804 0 0 0 0 0.223529 0 0 0 0.18 0" />
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1" />
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape" />
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)" />
+  <circle cx="824" cy="220" r="128" fill="#FFFFFF" fill-opacity="0.08" />
+  <circle cx="248" cy="840" r="156" fill="#FFFFFF" fill-opacity="0.08" />
+
+  <g filter="url(#shadow)">
+    <path
+      d="M304 208C304 181.49 325.49 160 352 160H598.118C610.849 160 623.059 165.057 632.059 174.059L719.941 261.941C728.943 270.941 734 283.151 734 295.882V752C734 778.51 712.51 800 686 800H352C325.49 800 304 778.51 304 752V208Z"
+      fill="url(#paper)"
+    />
+    <path d="M598 160V262C598 288.51 619.49 310 646 310H748" fill="#D2E7FF" />
+    <path
+      d="M598 160V262C598 288.51 619.49 310 646 310H748"
+      stroke="#BBD7F7"
+      stroke-width="18"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <rect x="388" y="332" width="58" height="272" rx="29" fill="#0E2A47" />
+  <rect x="542" y="332" width="58" height="272" rx="29" fill="#0E2A47" />
+  <rect x="326" y="402" width="336" height="58" rx="29" fill="#0E2A47" />
+  <rect x="326" y="548" width="336" height="58" rx="29" fill="#0E2A47" />
+
+  <rect x="326" y="680" width="160" height="44" rx="22" fill="#17B890" />
+  <rect x="510" y="680" width="92" height="44" rx="22" fill="#90E0D0" />
+</svg>

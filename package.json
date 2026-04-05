@@ -84,6 +84,7 @@
   "build": {
     "appId": "com.smartkmark.app",
     "productName": "SmartKMark",
+    "icon": "build/icon.png",
     "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"
@@ -94,6 +95,7 @@
       "package.json"
     ],
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         "AppImage",
         "deb"
@@ -101,11 +103,13 @@
       "category": "Utility"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         "dmg"
       ],
