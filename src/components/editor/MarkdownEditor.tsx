@@ -24,6 +24,10 @@ import {
   taskList,
   wrapSelection,
 } from '../../lib/markdown-shortcuts';
+import {
+  clipboardHtmlHasMarkdownFormatting,
+  convertHtmlToMarkdown,
+} from '../../lib/html-to-markdown';
 import type { EditorFontSize, LineWrapMode } from '../../types';
 
 export type EditorCommand =
@@ -248,11 +252,44 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
       const editorSpellcheckAttributes = EditorView.editorAttributes.of({
         lang: spellcheckLocale,
       });
+      const pasteMarkdownFromHtml = EditorView.domEventHandlers({
+        paste(event, view) {
+          const html = event.clipboardData?.getData('text/html') ?? '';
+
+          if (!html || !clipboardHtmlHasMarkdownFormatting(html)) {
+            return false;
+          }
+
+          const markdown = convertHtmlToMarkdown(html);
+
+          if (!markdown) {
+            return false;
+          }
+
+          const selection = view.state.selection.main;
+
+          event.preventDefault();
+          view.dispatch({
+            changes: {
+              from: selection.from,
+              to: selection.to,
+              insert: markdown,
+            },
+            selection: {
+              anchor: selection.from + markdown.length,
+            },
+            userEvent: 'input.paste',
+          });
+
+          return true;
+        },
+      });
       const shared = [
         markdown(),
         keyBindings,
         spellcheckAttributes,
         editorSpellcheckAttributes,
+        pasteMarkdownFromHtml,
         EditorView.cspNonce.of(import.meta.env.APP_CSP_NONCE),
         EDITOR_THEME,
       ];
