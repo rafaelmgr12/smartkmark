@@ -3,6 +3,7 @@ import {
   SETTINGS_FONT_SIZE_VALUES,
   SETTINGS_LAYOUT_VALUES,
   SETTINGS_LINE_WRAP_VALUES,
+  SETTINGS_SPELLCHECK_LOCALE_VALUES,
   SETTINGS_THEME_VALUES,
   errorDetails,
   isRecord,
@@ -36,6 +37,11 @@ function normalizeSettings(value: unknown): AppSettings {
       typeof raw.previewOpen === 'boolean'
         ? raw.previewOpen
         : DEFAULT_SETTINGS.previewOpen,
+    spellcheckLocale: readUnionValue(
+      raw.spellcheckLocale,
+      SETTINGS_SPELLCHECK_LOCALE_VALUES,
+      DEFAULT_SETTINGS.spellcheckLocale
+    ),
   };
 }
 

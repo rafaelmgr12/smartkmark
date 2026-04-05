@@ -15,6 +15,7 @@ export type ThemeName = 'workbench-dark' | 'workbench-light';
 export type EditorFontSize = 'sm' | 'md' | 'lg';
 export type LineWrapMode = 'wrap' | 'scroll';
 export type LayoutMode = 'workbench' | 'writer' | 'editor';
+export type SpellcheckLocale = 'pt-BR' | 'es-ES' | 'en-US';
 
 export interface AppSettings {
   theme: ThemeName;
@@ -22,6 +23,7 @@ export interface AppSettings {
   editorFontSize: EditorFontSize;
   lineWrap: LineWrapMode;
   previewOpen: boolean;
+  spellcheckLocale: SpellcheckLocale;
 }
 
 export interface DesktopProfile {

@@ -56,6 +56,7 @@ export function createSettings(
     editorFontSize: 'md',
     lineWrap: 'wrap',
     previewOpen: true,
+    spellcheckLocale: 'pt-BR',
     ...overrides,
   };
 }
